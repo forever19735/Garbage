@@ -106,15 +106,15 @@ def handle_message(event):
     if event.message.text.strip() == "@debug":
         gid = getattr(event.source, "group_id", None)
         if gid:
-            line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text=f"群組ID是：{gid}")
-            )
-        else:
-            line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text="這不是群組。")
-            )
+    messaging_api.reply_message(
+        event.reply_token,
+        messages=[TextMessage(text=f"群組ID是：{gid}")]
+    )
+else:
+    messaging_api.reply_message(
+        event.reply_token,
+        messages=[TextMessage(text="這不是群組。")]
+    )
 
 if __name__ == "__main__":
     import os
