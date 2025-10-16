@@ -107,15 +107,18 @@ def handle_message(event):
         if event.message.text.strip() == "@debug":
             gid = getattr(event.source, "group_id", None)
             if gid:
-                messaging_api.reply_message(
-                    event.reply_token,
+                from linebot.v3.messaging.models import ReplyMessageRequest
+                req = ReplyMessageRequest(
+                    reply_token=event.reply_token,
                     messages=[TextMessage(text=f"群組ID是：{gid}")]
                 )
+                messaging_api.reply_message(req)
             else:
-                messaging_api.reply_message(
-                    event.reply_token,
+                req = ReplyMessageRequest(
+                    reply_token=event.reply_token,
                     messages=[TextMessage(text="這不是群組。")]
                 )
+                messaging_api.reply_message(req)
 
 if __name__ == "__main__":
     import os
