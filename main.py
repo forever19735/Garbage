@@ -16,6 +16,8 @@ LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
 
 print("ACCESS_TOKEN:", LINE_CHANNEL_ACCESS_TOKEN)
 print("CHANNEL_SECRET:", LINE_CHANNEL_SECRET)
+# 確認 group ids 有沒有設定
+print("GROUP_ID:", os.getenv("LINE_GROUP_ID"))
 
 configuration = Configuration(access_token=LINE_CHANNEL_ACCESS_TOKEN)
 api_client = ApiClient(configuration)
