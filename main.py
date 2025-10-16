@@ -69,6 +69,8 @@ def index():
 def callback():
     signature = request.headers["X-Line-Signature"]
     body = request.get_data(as_text=True)
+    print("收到 LINE Webhook 請求：", body)
+
     try:
         handler.handle(body, signature)
     except Exception as e:
@@ -96,33 +98,23 @@ def callback():
 
 
 # ===== 處理訊息事件 =====
-@handler.add(MessageEvent)
+@handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    if getattr(event.message, "type", None) != "text":
-        return
-    text = event.message.text.strip()
+    print("收到訊息:", event.message.text)
+    print("來源:", event.source)
 
-    # ✅ debug 指令：回傳群組 ID
-    if text == "@debug":
-        try:
-            gid = getattr(event.source, "group_id", None)
-            if gid:
-                reply_text = f"群組ID是：{gid}"
-            else:
-                reply_text = "這不是群組對話，無法取得群組 ID。"
-        except Exception as e:
-            reply_text = f"取得群組 ID 失敗：{e}"
-
-        messaging_api.reply_message(
-            event.reply_token,
-            messages=[TextMessage(text=reply_text)]
-        )
-
-    # ✅ 其他指令：可擴充
-    elif text == "@test":
-        messaging_api.reply_message(
-            event.reply_token,
-            messages=[TextMessage(text="Bot 運作正常 ✅")]
+    if event.message.text.strip() == "@debug":
+        gid = getattr(event.source, "group_id", None)
+        if gid:
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text=f"群組ID是：{gid}")
+            )
+        else:
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text="這不是群組。")
+            )
         )
 
 if __name__ == "__main__":
