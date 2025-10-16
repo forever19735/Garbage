@@ -115,7 +115,6 @@ def handle_message(event):
                 event.reply_token,
                 TextSendMessage(text="這不是群組。")
             )
-        )
 
 if __name__ == "__main__":
     import os
