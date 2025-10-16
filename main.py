@@ -24,8 +24,8 @@ handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
 # ===== 成員輪值設定 =====
 groups = [
-    ["A", "B"],  # 第一週
-    ["C", "D"],  # 第二週
+    ["hsinwei💐", "林志鴻"],  # 第一週
+    ["徐意淳", "D"],  # 第二週
 ]
 
 # 你的群組 ID，從 @debug 指令得到後再放入環境變數
@@ -58,7 +58,7 @@ def send_trash_reminder():
 
 # ===== 啟動排程（每週一、四上午 9:00）=====
 scheduler = BackgroundScheduler()
-scheduler.add_job(send_trash_reminder, "cron", day_of_week="mon,thu", hour=16, minute=20)
+scheduler.add_job(send_trash_reminder, "cron", day_of_week="mon,thu", hour=17, minute=10)
 scheduler.start()
 
 @app.route("/")
