@@ -98,23 +98,24 @@ def callback():
 
 
 # ===== 處理訊息事件 =====
-@handler.add(MessageEvent, message=TextMessage)
+@handler.add(MessageEvent)
 def handle_message(event):
-    print("收到訊息:", event.message.text)
-    print("來源:", event.source)
+    if getattr(event.message, "type", None) == "text":
+        print("收到訊息:", event.message.text)
+        print("來源:", event.source)
 
-    if event.message.text.strip() == "@debug":
-        gid = getattr(event.source, "group_id", None)
-        if gid:
-            messaging_api.reply_message(
-                event.reply_token,
-                messages=[TextMessage(text=f"群組ID是：{gid}")]
-            )
-        else:
-            messaging_api.reply_message(
-                event.reply_token,
-                messages=[TextMessage(text="這不是群組。")]
-            )
+        if event.message.text.strip() == "@debug":
+            gid = getattr(event.source, "group_id", None)
+            if gid:
+                messaging_api.reply_message(
+                    event.reply_token,
+                    messages=[TextMessage(text=f"群組ID是：{gid}")]
+                )
+            else:
+                messaging_api.reply_message(
+                    event.reply_token,
+                    messages=[TextMessage(text="這不是群組。")]
+                )
 
 if __name__ == "__main__":
     import os
