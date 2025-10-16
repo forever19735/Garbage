@@ -1,26 +1,34 @@
 from flask import Flask, request, abort
 from datetime import date
 from apscheduler.schedulers.background import BackgroundScheduler
-from linebot import LineBotApi, WebhookHandler
-from linebot.models import TextSendMessage
+from linebot.v3.messaging import MessagingApi, Configuration, ApiClient
+from linebot.v3.webhook import WebhookHandler, MessageEvent
+from linebot.v3.messaging.models import PushMessageRequest, TextMessage
+from linebot.v3.messaging.models import PushMessageRequest, TextMessage
 import os
 
 app = Flask(__name__)
 
 # ===== LINE Bot 設定 =====
-LINE_CHANNEL_ACCESS_TOKEN = os.getenv("dQGjRjI4x4x/0aJeoO+DAivjcV0zinQbClxGETsirdIRfkGP7BYDLGOedKLQ3e1rZqgwpM1NstjrZEMQWbDTE/g+sNeqPu6xIMDNvU8dGfZHpb9vDant1973WVX7Lr8qdbA5m7JBE9xx9aCMOk+LkgdB04t89/1O/w1cDnyilFU=")
-LINE_CHANNEL_SECRET = os.getenv("286b219a9f0725d1ede64665376d9600")
+LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
+LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
 
-line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
+
+print("ACCESS_TOKEN:", LINE_CHANNEL_ACCESS_TOKEN)
+print("CHANNEL_SECRET:", LINE_CHANNEL_SECRET)
+
+configuration = Configuration(access_token=LINE_CHANNEL_ACCESS_TOKEN)
+api_client = ApiClient(configuration)
+messaging_api = MessagingApi(api_client)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
 # ===== 成員輪值設定 =====
 groups = [
-    ["A", "B"],  # 第一週：A、B
-    ["C", "D"],  # 第二週：C、D
+    ["A", "B"],  # 第一週
+    ["C", "D"],  # 第二週
 ]
 
-# 請填入你的群組 ID（可在 Bot 加入群組後用 debug 方式取得）
+# 你的群組 ID，從 @debug 指令得到後再放入環境變數
 group_ids = [os.getenv("LINE_GROUP_ID")]
 
 # ===== 判斷當週誰要收垃圾 =====
@@ -41,12 +49,16 @@ def send_trash_reminder():
 
     for gid in group_ids:
         if gid:
-            line_bot_api.push_message(gid, TextSendMessage(text=message))
+            req = PushMessageRequest(
+                to=gid,
+                messages=[TextMessage(text=message)]
+            )
+            messaging_api.push_message(req)
     print(message)
 
-# ===== 啟動排程（每週一、四 9:00）=====
+# ===== 啟動排程（每週一、四上午 9:00）=====
 scheduler = BackgroundScheduler()
-scheduler.add_job(send_trash_reminder, "cron", day_of_week="mon,thu", hour=8, minute=0)
+scheduler.add_job(send_trash_reminder, "cron", day_of_week="mon,thu", hour=9, minute=0)
 scheduler.start()
 
 @app.route("/")
@@ -64,6 +76,54 @@ def callback():
         abort(400)
     return "OK"
 
+# @handler.add(MessageEvent, message=TextMessage)
+# def handle_message(event):
+#     text = event.message.text.strip()
+
+#     if text == "@debug":
+#         gid = getattr(event.source, "group_id", None)
+#         if gid:
+#             line_bot_api.push_message(
+#                 gid,
+#                 TextSendMessage(text=f"群組ID是：{gid}")
+#             )
+#         else:
+#             # 個人聊天室，直接 reply
+#             line_bot_api.reply_message(
+#                 event.reply_token,
+#                 TextSendMessage(text="這不是群組對話，無法取得群組 ID。")
+#             )
+
+
+# ===== 處理訊息事件 =====
+@handler.add(MessageEvent)
+def handle_message(event):
+    if getattr(event.message, "type", None) != "text":
+        return
+    text = event.message.text.strip()
+
+    # ✅ debug 指令：回傳群組 ID
+    if text == "@debug":
+        try:
+            gid = getattr(event.source, "group_id", None)
+            if gid:
+                reply_text = f"群組ID是：{gid}"
+            else:
+                reply_text = "這不是群組對話，無法取得群組 ID。"
+        except Exception as e:
+            reply_text = f"取得群組 ID 失敗：{e}"
+
+        messaging_api.reply_message(
+            event.reply_token,
+            messages=[TextMessage(text=reply_text)]
+        )
+
+    # ✅ 其他指令：可擴充
+    elif text == "@test":
+        messaging_api.reply_message(
+            event.reply_token,
+            messages=[TextMessage(text="Bot 運作正常 ✅")]
+        )
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000)
-
