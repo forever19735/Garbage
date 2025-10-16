@@ -103,30 +103,6 @@ def callback():
 # ===== 處理訊息事件 =====
 @handler.add(MessageEvent)
 def handle_message(event):
-        # 使用者設定推播時間指令
-        if event.message.text.strip().startswith("@settime"):
-            import re
-            m = re.match(r"@settime (\d{1,2}):(\d{2})", event.message.text.strip())
-            if m:
-                hour = int(m.group(1))
-                minute = int(m.group(2))
-                # 移除舊排程，新增新排程
-                global job
-                job.remove()
-                job = scheduler.add_job(send_trash_reminder, CronTrigger(day_of_week="mon,thu", hour=hour, minute=minute))
-                from linebot.v3.messaging.models import ReplyMessageRequest
-                req = ReplyMessageRequest(
-                    reply_token=event.reply_token,
-                    messages=[TextMessage(text=f"推播時間已更新為 {hour:02d}:{minute:02d}")]
-                )
-                messaging_api.reply_message(req)
-            else:
-                from linebot.v3.messaging.models import ReplyMessageRequest
-                req = ReplyMessageRequest(
-                    reply_token=event.reply_token,
-                    messages=[TextMessage(text="格式錯誤，請輸入 @settime HH:MM")]
-                )
-                messaging_api.reply_message(req)
     if getattr(event.message, "type", None) == "text":
         print("收到訊息:", event.message.text)
         print("來源:", event.source)
