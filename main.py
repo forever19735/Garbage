@@ -58,7 +58,7 @@ def send_trash_reminder():
 
 # ===== 啟動排程（每週一、四上午 9:00）=====
 scheduler = BackgroundScheduler()
-scheduler.add_job(send_trash_reminder, "cron", day_of_week="mon,thu", hour=9, minute=0)
+scheduler.add_job(send_trash_reminder, "cron", day_of_week="mon,thu", hour=16, minute=20)
 scheduler.start()
 
 @app.route("/")
