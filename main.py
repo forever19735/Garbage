@@ -12,12 +12,14 @@ app = Flask(__name__)
 # ===== LINE Bot 設定 =====
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
+# 你的群組 ID，從 @debug 指令得到後再放入環境變數
+group_ids = [os.getenv("LINE_GROUP_ID")]
 
 
 print("ACCESS_TOKEN:", LINE_CHANNEL_ACCESS_TOKEN)
 print("CHANNEL_SECRET:", LINE_CHANNEL_SECRET)
 # 確認 group ids 有沒有設定
-print("GROUP_ID:", os.getenv("LINE_GROUP_ID"))
+print("GROUP_ID:", group_ids)
 
 configuration = Configuration(access_token=LINE_CHANNEL_ACCESS_TOKEN)
 api_client = ApiClient(configuration)
@@ -30,8 +32,6 @@ groups = [
     ["徐意淳", "D"],  # 第二週
 ]
 
-# 你的群組 ID，從 @debug 指令得到後再放入環境變數
-group_ids = [os.getenv("LINE_GROUP_ID")]
 
 # ===== 判斷當週誰要收垃圾 =====
 def get_current_group():
