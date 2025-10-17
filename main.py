@@ -73,6 +73,75 @@ def get_current_group():
     week_num = today.isocalendar()[1]  # 第幾週
     return groups[(week_num - 1) % len(groups)]
 
+# ===== 取得目前設定的群組 ID =====
+def get_line_group_ids():
+    """
+    取得目前設定的 LINE 群組 ID 列表
+    
+    Returns:
+        list: 包含所有已設定群組 ID 的列表
+        dict: 包含群組 ID 資訊的詳細字典
+    """
+    return {
+        "group_ids": group_ids.copy(),  # 返回副本避免外部修改
+        "count": len(group_ids),
+        "is_configured": len(group_ids) > 0,
+        "valid_ids": [gid for gid in group_ids if gid and gid.startswith("C") and len(gid) > 10]
+    }
+
+def add_line_group_id(group_id):
+    """
+    添加新的群組 ID 到列表中
+    
+    Args:
+        group_id (str): 要添加的群組 ID
+        
+    Returns:
+        dict: 操作結果
+    """
+    global group_ids
+    
+    # 驗證群組 ID 格式
+    if not group_id or not isinstance(group_id, str):
+        return {"success": False, "message": "群組 ID 不能為空"}
+    
+    if not group_id.startswith("C") or len(group_id) <= 10:
+        return {"success": False, "message": "群組 ID 格式無效，應該以 'C' 開頭且長度大於 10"}
+    
+    # 檢查是否已存在
+    if group_id in group_ids:
+        return {"success": False, "message": f"群組 ID {group_id} 已存在"}
+    
+    # 添加到列表
+    group_ids.append(group_id)
+    return {
+        "success": True, 
+        "message": f"成功添加群組 ID: {group_id}",
+        "total_groups": len(group_ids)
+    }
+
+def remove_line_group_id(group_id):
+    """
+    從列表中移除指定的群組 ID
+    
+    Args:
+        group_id (str): 要移除的群組 ID
+        
+    Returns:
+        dict: 操作結果
+    """
+    global group_ids
+    
+    if group_id in group_ids:
+        group_ids.remove(group_id)
+        return {
+            "success": True,
+            "message": f"成功移除群組 ID: {group_id}",
+            "total_groups": len(group_ids)
+        }
+    else:
+        return {"success": False, "message": f"群組 ID {group_id} 不存在"}
+
 def send_trash_reminder():
     today = date.today()
     weekday = today.weekday()  # 0=週一, 1=週二, ..., 6=週日
@@ -250,14 +319,13 @@ def handle_message(event):
         if event.message.text.strip() == "@debug":
             gid = getattr(event.source, "group_id", None)
             if gid:
-                global group_ids
-                # 自動添加群組 ID 到列表中（如果還沒有的話）
-                if gid not in group_ids:
-                    group_ids.append(gid)
+                # 使用新的函數添加群組 ID
+                result = add_line_group_id(gid)
+                if result["success"]:
                     print(f"DEBUG: 新增群組 ID: {gid}")
-                    response_text = f"✅ 群組ID已添加：{gid}\n目前已設定的群組: {len(group_ids)} 個"
+                    response_text = f"✅ 群組ID已添加：{gid}\n目前已設定的群組: {result['total_groups']} 個"
                 else:
-                    response_text = f"ℹ️ 群組ID已存在：{gid}\n目前已設定的群組: {len(group_ids)} 個"
+                    response_text = f"ℹ️ {result['message']}\n目前已設定的群組: {len(group_ids)} 個"
                 
                 from linebot.v3.messaging.models import ReplyMessageRequest
                 req = ReplyMessageRequest(
@@ -277,6 +345,34 @@ def handle_message(event):
             if group_ids:
                 group_list = "\n".join([f"{i+1}. {gid}" for i, gid in enumerate(group_ids)])
                 response_text = f"📋 目前已設定的群組 ({len(group_ids)} 個):\n{group_list}"
+            else:
+                response_text = "❌ 尚未設定任何群組 ID\n請在群組中輸入 @debug 來添加群組 ID"
+            
+            from linebot.v3.messaging.models import ReplyMessageRequest
+            req = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=response_text)]
+            )
+            messaging_api.reply_message(req)
+        
+        # 顯示詳細的群組 ID 資訊
+        if event.message.text.strip() == "@info":
+            group_info = get_line_group_ids()
+            
+            if group_info["is_configured"]:
+                valid_count = len(group_info["valid_ids"])
+                invalid_count = group_info["count"] - valid_count
+                
+                response_text = f"📊 群組 ID 詳細資訊：\n\n"
+                response_text += f"總群組數：{group_info['count']}\n"
+                response_text += f"有效群組：{valid_count}\n"
+                if invalid_count > 0:
+                    response_text += f"無效群組：{invalid_count}\n"
+                
+                response_text += f"\n📋 群組列表：\n"
+                for i, gid in enumerate(group_info["group_ids"], 1):
+                    status = "✅" if gid in group_info["valid_ids"] else "❌"
+                    response_text += f"{i}. {status} {gid}\n"
             else:
                 response_text = "❌ 尚未設定任何群組 ID\n請在群組中輸入 @debug 來添加群組 ID"
             
