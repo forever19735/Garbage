@@ -41,15 +41,21 @@ def get_current_group():
 
 def send_trash_reminder():
     today = date.today()
-    weekday = today.weekday()  # 0=週一, 3=週四
+    weekday = today.weekday()  # 0=週一, 1=週二, ..., 6=週日
     print(f"DEBUG: 今天是 {today.strftime('%m/%d')}, 星期 {weekday}")
     
-    if weekday not in [0, 3]:
-        print("DEBUG: 今天不是週一或週四，不推播")
-        return  # 只在週一、四提醒
-
+    # 移除週一四限制，根據排程執行
     group = get_current_group()
-    person = group[0] if weekday == 0 else group[1]
+    
+    # 根據星期決定誰收垃圾（可自訂規則）
+    # 週一=0, 週二=1, 週三=2, 週四=3, 週五=4, 週六=5, 週日=6
+    if weekday in [0, 3]:  # 週一、週四 -> 第一個人
+        person = group[0]
+    elif weekday in [1, 4]:  # 週二、週五 -> 第二個人  
+        person = group[1]
+    else:  # 其他天數可自訂規則
+        person = group[weekday % len(group)]  # 輪流
+    
     message = f"🗑️ 今天 {today.strftime('%m/%d')} 輪到 {person} 收垃圾！"
     
     print(f"DEBUG: 準備推播訊息: {message}")
