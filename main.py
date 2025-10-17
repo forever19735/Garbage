@@ -112,7 +112,6 @@ def handle_message(event):
             days = m.group(1)
             hour = int(m.group(2))
             minute = int(m.group(3))
-            global job
             job.remove()
             job = scheduler.add_job(send_trash_reminder, CronTrigger(day_of_week=days, hour=hour, minute=minute))
             from linebot.v3.messaging.models import ReplyMessageRequest
@@ -138,7 +137,6 @@ def handle_message(event):
             # 取得目前排程時間
             hour = job.trigger.fields[1].expressions[0].value if hasattr(job, 'trigger') else 17
             minute = job.trigger.fields[0].expressions[0].value if hasattr(job, 'trigger') else 10
-            global job
             job.remove()
             job = scheduler.add_job(send_trash_reminder, CronTrigger(day_of_week=days, hour=hour, minute=minute))
             from linebot.v3.messaging.models import ReplyMessageRequest
@@ -166,7 +164,6 @@ def handle_message(event):
             if m:
                 hour = int(m.group(1))
                 minute = int(m.group(2))
-                global job
                 job.remove()
                 job = scheduler.add_job(send_trash_reminder, CronTrigger(day_of_week="mon,thu", hour=hour, minute=minute))
                 from linebot.v3.messaging.models import ReplyMessageRequest
