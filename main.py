@@ -28,7 +28,7 @@ group_ids = []
 
 # 從環境變數載入已知的群組 ID
 if os.getenv("LINE_GROUP_ID"):
-    group_ids = [gid.strip() for gid in os.getenv("LINE_GROUP_ID").split(",") if gid.strip()]
+    group_ids = ["C2260711e7290fc2307aebdfb60d94fd4"]
 
 
 print("ACCESS_TOKEN:", LINE_CHANNEL_ACCESS_TOKEN)
