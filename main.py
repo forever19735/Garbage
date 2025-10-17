@@ -103,56 +103,57 @@ def callback():
 # ===== 處理訊息事件 =====
 @handler.add(MessageEvent)
 def handle_message(event):
-        # 使用者設定推播星期、時、分指令
-        if event.message.text.strip().startswith("@setcron"):
-            import re
-            m = re.match(r"@setcron ([a-z,]+) (\d{1,2}) (\d{1,2})", event.message.text.strip())
-            if m:
-                days = m.group(1)
-                hour = int(m.group(2))
-                minute = int(m.group(3))
-                global job
-                job.remove()
-                job = scheduler.add_job(send_trash_reminder, CronTrigger(day_of_week=days, hour=hour, minute=minute))
-                from linebot.v3.messaging.models import ReplyMessageRequest
-                req = ReplyMessageRequest(
-                    reply_token=event.reply_token,
-                    messages=[TextMessage(text=f"推播時間已更新為 {days} {hour:02d}:{minute:02d}")]
-                )
-                messaging_api.reply_message(req)
-            else:
-                from linebot.v3.messaging.models import ReplyMessageRequest
-                req = ReplyMessageRequest(
-                    reply_token=event.reply_token,
-                    messages=[TextMessage(text="格式錯誤，請輸入 @setcron mon,thu 18 30")]
-                )
-                messaging_api.reply_message(req)
-        # 使用者設定推播星期指令
-        if event.message.text.strip().startswith("@setday"):
-            import re
-            m = re.match(r"@setday ([a-z,]+)", event.message.text.strip())
-            if m:
-                days = m.group(1)
-                # 取得目前排程時間
-                hour = job.trigger.fields[1].expressions[0].value if hasattr(job, 'trigger') else 17
-                minute = job.trigger.fields[0].expressions[0].value if hasattr(job, 'trigger') else 10
-                # 移除舊排程，新增新排程
-                global job
-                job.remove()
-                job = scheduler.add_job(send_trash_reminder, CronTrigger(day_of_week=days, hour=hour, minute=minute))
-                from linebot.v3.messaging.models import ReplyMessageRequest
-                req = ReplyMessageRequest(
-                    reply_token=event.reply_token,
-                    messages=[TextMessage(text=f"推播星期已更新為 {days}")]
-                )
-                messaging_api.reply_message(req)
-            else:
-                from linebot.v3.messaging.models import ReplyMessageRequest
-                req = ReplyMessageRequest(
-                    reply_token=event.reply_token,
-                    messages=[TextMessage(text="格式錯誤，請輸入 @setday mon,thu")]
-                )
-                messaging_api.reply_message(req)
+    # 使用者設定推播星期、時、分指令
+    if event.message.text.strip().startswith("@setcron"):
+        import re
+        m = re.match(r"@setcron ([a-z,]+) (\d{1,2}) (\d{1,2})", event.message.text.strip())
+        if m:
+            days = m.group(1)
+            hour = int(m.group(2))
+            minute = int(m.group(3))
+            global job
+            job.remove()
+            job = scheduler.add_job(send_trash_reminder, CronTrigger(day_of_week=days, hour=hour, minute=minute))
+            from linebot.v3.messaging.models import ReplyMessageRequest
+            req = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=f"推播時間已更新為 {days} {hour:02d}:{minute:02d}")]
+            )
+            messaging_api.reply_message(req)
+        else:
+            from linebot.v3.messaging.models import ReplyMessageRequest
+            req = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text="格式錯誤，請輸入 @setcron mon,thu 18 30")]
+            )
+            messaging_api.reply_message(req)
+
+    # 使用者設定推播星期指令
+    if event.message.text.strip().startswith("@setday"):
+        import re
+        m = re.match(r"@setday ([a-z,]+)", event.message.text.strip())
+        if m:
+            days = m.group(1)
+            # 取得目前排程時間
+            hour = job.trigger.fields[1].expressions[0].value if hasattr(job, 'trigger') else 17
+            minute = job.trigger.fields[0].expressions[0].value if hasattr(job, 'trigger') else 10
+            global job
+            job.remove()
+            job = scheduler.add_job(send_trash_reminder, CronTrigger(day_of_week=days, hour=hour, minute=minute))
+            from linebot.v3.messaging.models import ReplyMessageRequest
+            req = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=f"推播星期已更新為 {days}")]
+            )
+            messaging_api.reply_message(req)
+        else:
+            from linebot.v3.messaging.models import ReplyMessageRequest
+            req = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text="格式錯誤，請輸入 @setday mon,thu")]
+            )
+            messaging_api.reply_message(req)
+
     if getattr(event.message, "type", None) == "text":
         print("收到訊息:", event.message.text)
         print("來源:", event.source)
@@ -164,7 +165,6 @@ def handle_message(event):
             if m:
                 hour = int(m.group(1))
                 minute = int(m.group(2))
-                # 移除舊排程，新增新排程
                 global job
                 job.remove()
                 job = scheduler.add_job(send_trash_reminder, CronTrigger(day_of_week="mon,thu", hour=hour, minute=minute))
