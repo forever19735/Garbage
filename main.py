@@ -63,10 +63,12 @@ def send_trash_reminder():
                     to=gid,
                     messages=[TextMessage(text=message)]
                 )
-                messaging_api.push_message(req)
-                print("DEBUG: 推播成功")
+                response = messaging_api.push_message(req)
+                print(f"DEBUG: 推播成功 - Response: {response}")
             except Exception as e:
-                print(f"DEBUG: 推播失敗 - {e}")
+                print(f"DEBUG: 推播失敗 - {type(e).__name__}: {e}")
+                import traceback
+                print(f"DEBUG: 完整錯誤: {traceback.format_exc()}")
         else:
             print("DEBUG: 群組 ID 是 None，無法推播")
     print(message)
@@ -212,6 +214,17 @@ def handle_message(event):
                     messages=[TextMessage(text="這不是群組。")]
                 )
                 messaging_api.reply_message(req)
+        
+        # 測試推播功能
+        if event.message.text.strip() == "@test":
+            print("DEBUG: 收到 @test 指令，立即執行推播測試")
+            send_trash_reminder()
+            from linebot.v3.messaging.models import ReplyMessageRequest
+            req = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text="已執行推播測試，請查看 log")]
+            )
+            messaging_api.reply_message(req)
 
 if __name__ == "__main__":
     import os
