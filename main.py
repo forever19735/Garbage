@@ -24,7 +24,7 @@ LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
 # 你的群組 ID，從 @debug 指令得到後再放入環境變數
 # 暫時寫死測試（記得改回環境變數）
-group_ids = [os.getenv("LINE_GROUP_ID") or "你的實際群組ID"]
+group_ids = ["C2260711e7290fc2307aebdfb60d94fd4"]
 
 
 print("ACCESS_TOKEN:", LINE_CHANNEL_ACCESS_TOKEN)
