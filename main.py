@@ -142,6 +142,182 @@ def remove_line_group_id(group_id):
     else:
         return {"success": False, "message": f"群組 ID {group_id} 不存在"}
 
+# ===== 推播時間管理函數 =====
+def get_schedule_info():
+    """
+    取得目前設定的推播排程資訊
+    
+    Returns:
+        dict: 包含排程資訊的字典
+    """
+    global job
+    
+    if not job:
+        return {
+            "is_configured": False,
+            "message": "排程未設定",
+            "next_run_time": None,
+            "schedule_details": None
+        }
+    
+    try:
+        # 下次執行時間
+        next_run = job.next_run_time
+        next_run_str = next_run.strftime('%Y-%m-%d %H:%M:%S %Z') if next_run else "未知"
+        
+        # 從 job 的觸發器取得資訊
+        trigger = job.trigger
+        
+        # 取得基本資訊
+        schedule_details = {
+            "timezone": "Asia/Taipei",
+            "trigger_type": str(type(trigger).__name__)
+        }
+        
+        # 嘗試從觸發器字串解析資訊
+        trigger_str = str(trigger)
+        
+        # 解析 CronTrigger 資訊 (例如: "cron[day_of_week='1,4', hour='17', minute='10']")
+        if "day_of_week=" in trigger_str:
+            import re
+            
+            # 解析星期
+            day_match = re.search(r"day_of_week='([^']+)'", trigger_str)
+            if day_match:
+                days_numbers = day_match.group(1).split(',')
+                day_names = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
+                days = []
+                for day_num in days_numbers:
+                    try:
+                        idx = int(day_num.strip())
+                        if 0 <= idx <= 6:
+                            days.append(day_names[idx])
+                    except (ValueError, IndexError):
+                        pass
+                schedule_details["days"] = ','.join(days) if days else "未知"
+            
+            # 解析小時
+            hour_match = re.search(r"hour='([^']+)'", trigger_str)
+            if hour_match:
+                try:
+                    hour = int(hour_match.group(1))
+                    schedule_details["hour"] = hour
+                except ValueError:
+                    schedule_details["hour"] = None
+            
+            # 解析分鐘
+            minute_match = re.search(r"minute='([^']+)'", trigger_str)
+            if minute_match:
+                try:
+                    minute = int(minute_match.group(1))
+                    schedule_details["minute"] = minute
+                except ValueError:
+                    schedule_details["minute"] = None
+        
+        # 格式化時間顯示
+        if "hour" in schedule_details and "minute" in schedule_details:
+            hour = schedule_details.get("hour")
+            minute = schedule_details.get("minute")
+            if hour is not None and minute is not None:
+                schedule_details["time"] = f"{hour:02d}:{minute:02d}"
+            else:
+                schedule_details["time"] = "未設定"
+        else:
+            schedule_details["time"] = "未設定"
+        
+        # 建立 cron 表達式
+        minute_val = schedule_details.get("minute", "*")
+        hour_val = schedule_details.get("hour", "*")
+        days_val = schedule_details.get("days", "*")
+        
+        cron_expr = f"{minute_val} {hour_val} * * {days_val}"
+        
+        return {
+            "is_configured": True,
+            "message": "排程已設定",
+            "next_run_time": next_run_str,
+            "schedule_details": schedule_details,
+            "cron_expression": cron_expr,
+            "raw_trigger": trigger_str
+        }
+        
+    except Exception as e:
+        return {
+            "is_configured": False,
+            "message": f"無法解析排程資訊: {str(e)}",
+            "next_run_time": None,
+            "schedule_details": None,
+            "error": str(e)
+        }
+
+def update_schedule(days=None, hour=None, minute=None):
+    """
+    更新推播排程設定
+    
+    Args:
+        days (str): 星期設定，例如 "mon,thu"
+        hour (int): 小時 (0-23)
+        minute (int): 分鐘 (0-59)
+        
+    Returns:
+        dict: 操作結果
+    """
+    global job
+    
+    try:
+        # 取得目前設定
+        current_info = get_schedule_info()
+        
+        # 使用提供的參數或保持目前設定
+        if days is None and current_info["is_configured"]:
+            days = current_info["schedule_details"]["days"]
+        elif days is None:
+            days = "mon,thu"  # 預設值
+            
+        if hour is None and current_info["is_configured"]:
+            hour = current_info["schedule_details"]["hour"]
+        elif hour is None:
+            hour = 17  # 預設值
+            
+        if minute is None and current_info["is_configured"]:
+            minute = current_info["schedule_details"]["minute"]
+        elif minute is None:
+            minute = 10  # 預設值
+        
+        # 驗證參數
+        if not isinstance(hour, int) or not (0 <= hour <= 23):
+            return {"success": False, "message": "小時必須是 0-23 的整數"}
+        
+        if not isinstance(minute, int) or not (0 <= minute <= 59):
+            return {"success": False, "message": "分鐘必須是 0-59 的整數"}
+        
+        # 驗證星期格式
+        valid_days = {'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'}
+        day_list = [d.strip() for d in days.split(',')]
+        if not all(day in valid_days for day in day_list):
+            return {"success": False, "message": "星期格式無效，請使用 mon,tue,wed,thu,fri,sat,sun"}
+        
+        # 移除舊排程
+        if job:
+            job.remove()
+        
+        # 建立新排程
+        from apscheduler.triggers.cron import CronTrigger
+        job = scheduler.add_job(send_trash_reminder, CronTrigger(day_of_week=days, hour=hour, minute=minute))
+        
+        return {
+            "success": True,
+            "message": f"推播時間已更新為 {days} {hour:02d}:{minute:02d}",
+            "schedule": {
+                "days": days,
+                "time": f"{hour:02d}:{minute:02d}",
+                "next_run": job.next_run_time.strftime('%Y-%m-%d %H:%M:%S %Z') if job.next_run_time else "未知"
+            }
+        }
+        
+    except Exception as e:
+        return {"success": False, "message": f"更新排程失敗: {str(e)}", "error": str(e)}
+
 def send_trash_reminder():
     today = date.today()
     weekday = today.weekday()  # 0=週一, 1=週二, ..., 6=週日
@@ -375,6 +551,30 @@ def handle_message(event):
                     response_text += f"{i}. {status} {gid}\n"
             else:
                 response_text = "❌ 尚未設定任何群組 ID\n請在群組中輸入 @debug 來添加群組 ID"
+            
+            from linebot.v3.messaging.models import ReplyMessageRequest
+            req = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=response_text)]
+            )
+            messaging_api.reply_message(req)
+        
+        # 顯示推播排程資訊
+        if event.message.text.strip() == "@schedule":
+            schedule_info = get_schedule_info()
+            
+            if schedule_info["is_configured"]:
+                details = schedule_info["schedule_details"]
+                response_text = f"⏰ 目前推播排程：\n\n"
+                response_text += f"📅 星期：{details['days']}\n"
+                response_text += f"🕐 時間：{details['time']}\n"
+                response_text += f"🌏 時區：{details['timezone']}\n"
+                response_text += f"📋 Cron：{schedule_info['cron_expression']}\n\n"
+                response_text += f"⏭️ 下次執行：\n{schedule_info['next_run_time']}"
+            else:
+                response_text = f"❌ {schedule_info['message']}"
+                if "error" in schedule_info:
+                    response_text += f"\n錯誤：{schedule_info['error']}"
             
             from linebot.v3.messaging.models import ReplyMessageRequest
             req = ReplyMessageRequest(
