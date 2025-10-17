@@ -60,7 +60,8 @@ def send_trash_reminder():
 
 # ===== 啟動排程（每週一、四上午 9:00）=====
 from apscheduler.triggers.cron import CronTrigger
-scheduler = BackgroundScheduler()
+import pytz
+scheduler = BackgroundScheduler(timezone=pytz.timezone('Asia/Taipei'))
 job = scheduler.add_job(send_trash_reminder, "cron", day_of_week="mon,thu", hour=17, minute=10)
 scheduler.start()
 
