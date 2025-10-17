@@ -1,5 +1,5 @@
 from flask import Flask, request, abort
-from datetime import date
+from datetime import date, datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 from linebot.v3.messaging import MessagingApi, Configuration, ApiClient
 from linebot.v3.webhook import WebhookHandler, MessageEvent
@@ -77,6 +77,9 @@ import pytz
 scheduler = BackgroundScheduler(timezone=pytz.timezone('Asia/Taipei'))
 job = scheduler.add_job(send_trash_reminder, "cron", day_of_week="mon,thu", hour=17, minute=10)
 scheduler.start()
+
+print(f"DEBUG: 排程已啟動，下次執行時間: {job.next_run_time}")
+print(f"DEBUG: 當前時間: {pytz.timezone('Asia/Taipei').localize(datetime.now())}")
 
 @app.route("/")
 def index():
@@ -213,4 +216,4 @@ def handle_message(event):
 if __name__ == "__main__":
     import os
     port = int(os.environ.get("PORT", 8000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=port, debug=False)
