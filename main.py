@@ -103,6 +103,7 @@ def callback():
 # ===== 處理訊息事件 =====
 @handler.add(MessageEvent)
 def handle_message(event):
+    global job
     # 使用者設定推播星期、時、分指令
     if event.message.text.strip().startswith("@setcron"):
         import re
