@@ -22,9 +22,13 @@ app = Flask(__name__)
 # ===== LINE Bot 設定 =====
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
-# 你的群組 ID，從 @debug 指令得到後再放入環境變數
-# 暫時寫死測試（記得改回環境變數）
-group_ids = ["C2260711e7290fc2307aebdfb60d94fd4"]
+
+# 動態收集的群組 ID 列表
+group_ids = []
+
+# 從環境變數載入已知的群組 ID
+if os.getenv("LINE_GROUP_ID"):
+    group_ids = [gid.strip() for gid in os.getenv("LINE_GROUP_ID").split(",") if gid.strip()]
 
 
 print("ACCESS_TOKEN:", LINE_CHANNEL_ACCESS_TOKEN)
@@ -36,6 +40,20 @@ print("所有環境變數:")
 for key, value in os.environ.items():
     if 'LINE' in key.upper():
         print(f"  {key}: {repr(value)}")
+
+# 檢查必要的環境變數
+if not LINE_CHANNEL_ACCESS_TOKEN or not LINE_CHANNEL_SECRET:
+    print("警告：LINE Bot 環境變數未設定！")
+    print("請設定以下環境變數：")
+    print("- LINE_CHANNEL_ACCESS_TOKEN")
+    print("- LINE_CHANNEL_SECRET")
+    print("- LINE_GROUP_ID (可選，可透過 @debug 指令自動取得)")
+    
+    # 在本地測試時，如果環境變數未設定，就不初始化 LINE Bot API
+    if not LINE_CHANNEL_ACCESS_TOKEN:
+        LINE_CHANNEL_ACCESS_TOKEN = "dummy_token_for_testing"
+    if not LINE_CHANNEL_SECRET:
+        LINE_CHANNEL_SECRET = "dummy_secret_for_testing"
 
 configuration = Configuration(access_token=LINE_CHANNEL_ACCESS_TOKEN)
 api_client = ApiClient(configuration)
@@ -78,9 +96,14 @@ def send_trash_reminder():
     print(f"DEBUG: 準備推播訊息: {message}")
     print(f"DEBUG: 群組 IDs: {group_ids}")
 
+    if not group_ids:
+        print("DEBUG: 沒有設定任何群組 ID，無法推播")
+        print("DEBUG: 請在群組中輸入 @debug 指令來自動添加群組 ID")
+        return
+
     for gid in group_ids:
         # 驗證群組 ID 格式
-        if gid and gid != "你的實際群組ID" and gid.startswith("C") and len(gid) > 10:
+        if gid and gid.startswith("C") and len(gid) > 10:
             print(f"DEBUG: 推播到群組 {gid}")
             try:
                 req = PushMessageRequest(
@@ -94,12 +117,8 @@ def send_trash_reminder():
                 import traceback
                 print(f"DEBUG: 完整錯誤: {traceback.format_exc()}")
         else:
-            if not gid or gid == "你的實際群組ID":
-                print("DEBUG: 群組 ID 未設定或使用預設值，無法推播")
-                print("DEBUG: 請在群組中輸入 @debug 指令來取得真實的群組 ID")
-            else:
-                print(f"DEBUG: 群組 ID 格式無效: {gid}")
-                print("DEBUG: LINE 群組 ID 應該以 'C' 開頭，例如: C1234567890abcdef...")
+            print(f"DEBUG: 群組 ID 格式無效: {gid}")
+            print("DEBUG: LINE 群組 ID 應該以 'C' 開頭，例如: C1234567890abcdef...")
     print(message)
 
 # ===== 啟動排程（每週一、四上午 9:00）=====
@@ -231,18 +250,42 @@ def handle_message(event):
         if event.message.text.strip() == "@debug":
             gid = getattr(event.source, "group_id", None)
             if gid:
+                global group_ids
+                # 自動添加群組 ID 到列表中（如果還沒有的話）
+                if gid not in group_ids:
+                    group_ids.append(gid)
+                    print(f"DEBUG: 新增群組 ID: {gid}")
+                    response_text = f"✅ 群組ID已添加：{gid}\n目前已設定的群組: {len(group_ids)} 個"
+                else:
+                    response_text = f"ℹ️ 群組ID已存在：{gid}\n目前已設定的群組: {len(group_ids)} 個"
+                
                 from linebot.v3.messaging.models import ReplyMessageRequest
                 req = ReplyMessageRequest(
                     reply_token=event.reply_token,
-                    messages=[TextMessage(text=f"群組ID是：{gid}")]
+                    messages=[TextMessage(text=response_text)]
                 )
                 messaging_api.reply_message(req)
             else:
                 req = ReplyMessageRequest(
                     reply_token=event.reply_token,
-                    messages=[TextMessage(text="這不是群組。")]
+                    messages=[TextMessage(text="這不是群組，無法取得群組 ID。")]
                 )
                 messaging_api.reply_message(req)
+        
+        # 顯示目前已設定的群組列表
+        if event.message.text.strip() == "@groups":
+            if group_ids:
+                group_list = "\n".join([f"{i+1}. {gid}" for i, gid in enumerate(group_ids)])
+                response_text = f"📋 目前已設定的群組 ({len(group_ids)} 個):\n{group_list}"
+            else:
+                response_text = "❌ 尚未設定任何群組 ID\n請在群組中輸入 @debug 來添加群組 ID"
+            
+            from linebot.v3.messaging.models import ReplyMessageRequest
+            req = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=response_text)]
+            )
+            messaging_api.reply_message(req)
         
         # 測試推播功能
         if event.message.text.strip() == "@test":
