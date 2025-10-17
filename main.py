@@ -13,13 +13,19 @@ app = Flask(__name__)
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
 # 你的群組 ID，從 @debug 指令得到後再放入環境變數
-group_ids = [os.getenv("LINE_GROUP_ID")]
+# 暫時寫死測試（記得改回環境變數）
+group_ids = [os.getenv("LINE_GROUP_ID") or "你的實際群組ID"]
 
 
 print("ACCESS_TOKEN:", LINE_CHANNEL_ACCESS_TOKEN)
 print("CHANNEL_SECRET:", LINE_CHANNEL_SECRET)
 # 確認 group ids 有沒有設定
 print("GROUP_ID:", group_ids)
+print("RAW LINE_GROUP_ID:", repr(os.getenv("LINE_GROUP_ID")))
+print("所有環境變數:")
+for key, value in os.environ.items():
+    if 'LINE' in key.upper():
+        print(f"  {key}: {repr(value)}")
 
 configuration = Configuration(access_token=LINE_CHANNEL_ACCESS_TOKEN)
 api_client = ApiClient(configuration)
@@ -42,7 +48,8 @@ def get_current_group():
 def send_trash_reminder():
     today = date.today()
     weekday = today.weekday()  # 0=週一, 1=週二, ..., 6=週日
-    print(f"DEBUG: 今天是 {today.strftime('%m/%d')}, 星期 {weekday}")
+    weekday_names = ['週一', '週二', '週三', '週四', '週五', '週六', '週日']
+    print(f"DEBUG: 今天是 {today.strftime('%m/%d')}, {weekday_names[weekday]} (weekday={weekday})")
     
     # 移除週一四限制，根據排程執行
     group = get_current_group()
@@ -56,7 +63,7 @@ def send_trash_reminder():
     else:  # 其他天數可自訂規則
         person = group[weekday % len(group)]  # 輪流
     
-    message = f"🗑️ 今天 {today.strftime('%m/%d')} 輪到 {person} 收垃圾！"
+    message = f"🗑️ 今天 {today.strftime('%m/%d')} ({weekday_names[weekday]}) 輪到 {person} 收垃圾！"
     
     print(f"DEBUG: 準備推播訊息: {message}")
     print(f"DEBUG: 群組 IDs: {group_ids}")
