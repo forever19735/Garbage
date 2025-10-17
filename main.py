@@ -42,20 +42,33 @@ def get_current_group():
 def send_trash_reminder():
     today = date.today()
     weekday = today.weekday()  # 0=週一, 3=週四
+    print(f"DEBUG: 今天是 {today.strftime('%m/%d')}, 星期 {weekday}")
+    
     if weekday not in [0, 3]:
+        print("DEBUG: 今天不是週一或週四，不推播")
         return  # 只在週一、四提醒
 
     group = get_current_group()
     person = group[0] if weekday == 0 else group[1]
     message = f"🗑️ 今天 {today.strftime('%m/%d')} 輪到 {person} 收垃圾！"
+    
+    print(f"DEBUG: 準備推播訊息: {message}")
+    print(f"DEBUG: 群組 IDs: {group_ids}")
 
     for gid in group_ids:
         if gid:
-            req = PushMessageRequest(
-                to=gid,
-                messages=[TextMessage(text=message)]
-            )
-            messaging_api.push_message(req)
+            print(f"DEBUG: 推播到群組 {gid}")
+            try:
+                req = PushMessageRequest(
+                    to=gid,
+                    messages=[TextMessage(text=message)]
+                )
+                messaging_api.push_message(req)
+                print("DEBUG: 推播成功")
+            except Exception as e:
+                print(f"DEBUG: 推播失敗 - {e}")
+        else:
+            print("DEBUG: 群組 ID 是 None，無法推播")
     print(message)
 
 # ===== 啟動排程（每週一、四上午 9:00）=====
