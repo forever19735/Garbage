@@ -7,6 +7,16 @@ from linebot.v3.messaging.models import PushMessageRequest, TextMessage
 from linebot.v3.messaging.models import PushMessageRequest, TextMessage
 import os
 
+# 載入 .env 檔案中的環境變數（僅在本地開發時使用）
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+    print("DEBUG: .env 檔案已載入")
+except ImportError:
+    # 在生產環境中（如 Railway）沒有 python-dotenv，直接忽略
+    print("DEBUG: 未安裝 python-dotenv，跳過 .env 檔案載入")
+    pass
+
 app = Flask(__name__)
 
 # ===== LINE Bot 設定 =====
@@ -69,7 +79,8 @@ def send_trash_reminder():
     print(f"DEBUG: 群組 IDs: {group_ids}")
 
     for gid in group_ids:
-        if gid:
+        # 驗證群組 ID 格式
+        if gid and gid != "你的實際群組ID" and gid.startswith("C") and len(gid) > 10:
             print(f"DEBUG: 推播到群組 {gid}")
             try:
                 req = PushMessageRequest(
@@ -83,7 +94,12 @@ def send_trash_reminder():
                 import traceback
                 print(f"DEBUG: 完整錯誤: {traceback.format_exc()}")
         else:
-            print("DEBUG: 群組 ID 是 None，無法推播")
+            if not gid or gid == "你的實際群組ID":
+                print("DEBUG: 群組 ID 未設定或使用預設值，無法推播")
+                print("DEBUG: 請在群組中輸入 @debug 指令來取得真實的群組 ID")
+            else:
+                print(f"DEBUG: 群組 ID 格式無效: {gid}")
+                print("DEBUG: LINE 群組 ID 應該以 'C' 開頭，例如: C1234567890abcdef...")
     print(message)
 
 # ===== 啟動排程（每週一、四上午 9:00）=====
