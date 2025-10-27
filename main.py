@@ -612,23 +612,44 @@ mon, tue, wed, thu, fri, sat, sun
 @groups - 群組列表
 @info - 詳細群組資訊
 
+🆘 獲取幫助：
+@help - 顯示所有指令
+@help 類別 - 顯示特定類別指令
+類別：schedule, members, groups, manage, test"""
+
+    elif category == "manage":
+        return """🔧 管理和重置指令
+
+🗑️ 清空功能：
+@clear_week 週數 - 清空指定週的成員
+範例：@clear_week 1
+
+@clear_members - 清空所有週的成員安排
+@clear_groups - 清空所有群組 ID
+
 🔄 重置功能：
 @reset_all - 重置所有資料 (成員+群組)
 ⚠️ 此操作無法復原，請謹慎使用
 
-🆘 獲取幫助：
-@help - 顯示所有指令
-@help 類別 - 顯示特定類別指令
-類別：schedule, members, groups, test"""
+📊 系統管理：
+@status - 查看完整系統狀態
+包含：成員輪值狀態、群組狀態、排程狀態
+
+💡 管理建議：
+- 使用 @status 確認操作前的狀態
+- 漸進式清空：先清空特定週，再考慮全部清空
+- 重要資料請先記錄再執行重置
+- 清空操作會立即生效並持久化"""
 
     else:  # 顯示所有指令概覽
         return """🤖 垃圾收集提醒 Bot 指令大全
 
-📋 快速查看：
-@help schedule - 排程管理指令
-@help members - 成員管理指令  
-@help groups - 群組管理指令
-@help test - 測試和調試指令
+📋 分類查看：
+@help schedule - 排程管理指令 (設定提醒時間)
+@help members - 成員管理指令 (輪值安排)
+@help groups - 群組管理指令 (LINE 群組設定)
+@help manage - 管理重置指令 (清空/重置功能)
+@help test - 測試調試指令 (測試/狀態查看)
 
 🔥 常用指令：
 @schedule - 查看推播排程
@@ -654,17 +675,25 @@ mon, tue, wed, thu, fri, sat, sun
 @info - 顯示詳細群組資訊
 @clear_groups - 清空所有群組 ID
 
-🔄 重置功能：
+🔄 管理功能：
+@status - 查看完整系統狀態
 @reset_all - 重置所有資料 (謹慎使用)
 
-💡 提示：
+💡 使用提示：
 - 所有時間都是台北時間
 - 群組 ID 會自動記住
 - 支援多群組推播
 - 成員輪值自動循環
+- 所有設定都會持久化儲存
 
 ❓ 需要詳細說明請輸入：
-@help 類別名稱"""
+@help 類別名稱
+
+🏃‍♂️ 新手快速開始：
+1. 在群組中輸入 @debug (添加群組)
+2. 輸入 @settime 18:00 (設定提醒時間)
+3. 輸入 @setweek 1 姓名1,姓名2 (設定成員)
+4. 輸入 @test (測試推播)"""
 
 def get_command_examples():
     """
