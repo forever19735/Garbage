@@ -104,6 +104,27 @@ def reset_base_date():
             os.remove(BASE_DATE_FILE)
     except Exception as e:
         pass
+
+def load_group_schedules():
+    """載入群組推播排程設定"""
+    try:
+        if os.path.exists(GROUP_SCHEDULES_FILE):
+            with open(GROUP_SCHEDULES_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        return {}
+    except Exception as e:
+        print(f"載入群組排程設定失敗: {e}")
+        return {}
+
+def save_group_schedules(schedules):
+    """儲存群組推播排程設定"""
+    try:
+        with open(GROUP_SCHEDULES_FILE, 'w', encoding='utf-8') as f:
+            json.dump(schedules, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception as e:
+        print(f"儲存群組排程設定失敗: {e}")
+        return False
 # ===== LINE Bot 設定 =====
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
@@ -112,6 +133,10 @@ LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
 group_ids = load_group_ids()
 groups = load_groups()  # 儲存每週的成員名單
 base_date = load_base_date()  # 儲存基準日期（第一週開始日期）
+
+# 群組推播排程設定檔案
+GROUP_SCHEDULES_FILE = 'group_schedules.json'
+group_schedules = load_group_schedules()  # 儲存每個群組的推播設定
 
 # 從環境變數載入已知的群組 ID
 if os.getenv("LINE_GROUP_ID"):
@@ -1062,125 +1087,81 @@ def remove_line_group_id(group_id):
         return {"success": False, "message": f"群組 ID {group_id} 不存在"}
 
 # ===== 推播時間管理函數 =====
-def get_schedule_info():
+def get_schedule_info(group_id=None):
     """
     取得目前設定的推播排程資訊
     
+    Args:
+        group_id (str): 群組ID，如果為 None 則回傳所有群組的排程資訊
+        
     Returns:
         dict: 包含排程資訊的字典
     """
-    global job
+    global group_jobs, group_schedules
     
-    if not job:
-        return {
-            "is_configured": False,
-            "message": "排程未設定",
-            "next_run_time": None,
-            "schedule_details": None
-        }
-    
-    try:
-        # 下次執行時間
-        next_run = job.next_run_time
-        next_run_str = next_run.strftime('%Y-%m-%d %H:%M:%S %Z') if next_run else "未知"
+    if group_id:
+        # 取得特定群組的排程資訊
+        job = group_jobs.get(group_id)
+        if not job:
+            return {
+                "is_configured": False,
+                "message": f"群組 {group_id} 排程未設定",
+                "next_run_time": None,
+                "schedule_details": None,
+                "group_id": group_id
+            }
         
-        # 從 job 的觸發器取得資訊
-        trigger = job.trigger
-        
-        # 取得基本資訊
-        schedule_details = {
-            "timezone": "Asia/Taipei",
-            "trigger_type": str(type(trigger).__name__)
-        }
-        
-        # 嘗試從觸發器字串解析資訊
-        trigger_str = str(trigger)
-        
-        # 解析 CronTrigger 資訊 (例如: "cron[day_of_week='mon,thu', hour='17', minute='10']")
-        if "day_of_week=" in trigger_str:
-            import re
+        try:
+            # 下次執行時間
+            next_run = job.next_run_time
+            next_run_str = next_run.strftime('%Y-%m-%d %H:%M:%S %Z') if next_run else "未知"
             
-            # 解析星期
-            day_match = re.search(r"day_of_week='([^']+)'", trigger_str)
-            if day_match:
-                days_str = day_match.group(1)
-                # 處理兩種格式：數字格式 (1,4) 和字母格式 (mon,thu)
-                if days_str.replace(',', '').replace(' ', '').isdigit():
-                    # 數字格式
-                    days_numbers = days_str.split(',')
-                    day_names = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
-                    days = []
-                    for day_num in days_numbers:
-                        try:
-                            idx = int(day_num.strip())
-                            if 0 <= idx <= 6:
-                                days.append(day_names[idx])
-                        except (ValueError, IndexError):
-                            pass
-                    schedule_details["days"] = ','.join(days) if days else "未知"
-                else:
-                    # 字母格式，直接使用
-                    schedule_details["days"] = days_str
+            # 從儲存的設定取得資訊
+            schedule_config = group_schedules.get(group_id, {})
             
-            # 解析小時
-            hour_match = re.search(r"hour='([^']+)'", trigger_str)
-            if hour_match:
-                try:
-                    hour = int(hour_match.group(1))
-                    schedule_details["hour"] = hour
-                except ValueError:
-                    schedule_details["hour"] = None
+            schedule_details = {
+                "timezone": "Asia/Taipei",
+                "days": schedule_config.get("days", "mon,thu"),
+                "hour": schedule_config.get("hour", 17),
+                "minute": schedule_config.get("minute", 10),
+                "group_id": group_id
+            }
             
-            # 解析分鐘
-            minute_match = re.search(r"minute='([^']+)'", trigger_str)
-            if minute_match:
-                try:
-                    minute = int(minute_match.group(1))
-                    schedule_details["minute"] = minute
-                except ValueError:
-                    schedule_details["minute"] = None
-        
-        # 格式化時間顯示
-        if "hour" in schedule_details and "minute" in schedule_details:
-            hour = schedule_details.get("hour")
-            minute = schedule_details.get("minute")
-            if hour is not None and minute is not None:
-                schedule_details["time"] = f"{hour:02d}:{minute:02d}"
-            else:
-                schedule_details["time"] = "未設定"
-        else:
-            schedule_details["time"] = "未設定"
-        
-        # 建立 cron 表達式
-        minute_val = schedule_details.get("minute", "*")
-        hour_val = schedule_details.get("hour", "*")
-        days_val = schedule_details.get("days", "*")
-        
-        cron_expr = f"{minute_val} {hour_val} * * {days_val}"
+            return {
+                "is_configured": True,
+                "message": f"群組 {group_id} 排程已設定",
+                "next_run_time": next_run_str,
+                "schedule_details": schedule_details,
+                "group_id": group_id
+            }
+            
+        except Exception as e:
+            return {
+                "is_configured": False,
+                "message": f"取得群組 {group_id} 排程資訊失敗: {str(e)}",
+                "next_run_time": None,
+                "schedule_details": None,
+                "error": str(e),
+                "group_id": group_id
+            }
+    else:
+        # 回傳所有群組的排程資訊
+        all_schedules = {}
+        for gid in group_schedules:
+            all_schedules[gid] = get_schedule_info(gid)
         
         return {
-            "is_configured": True,
-            "message": "排程已設定",
-            "next_run_time": next_run_str,
-            "schedule_details": schedule_details,
-            "cron_expression": cron_expr,
-            "raw_trigger": trigger_str
-        }
-        
-    except Exception as e:
-        return {
-            "is_configured": False,
-            "message": f"無法解析排程資訊: {str(e)}",
-            "next_run_time": None,
-            "schedule_details": None,
-            "error": str(e)
+            "is_configured": len(all_schedules) > 0,
+            "message": f"目前有 {len(all_schedules)} 個群組設定排程",
+            "all_groups": all_schedules
         }
 
-def update_schedule(days=None, hour=None, minute=None):
+def update_schedule(group_id, days=None, hour=None, minute=None):
     """
-    更新推播排程設定
+    更新群組推播排程設定
     
     Args:
+        group_id (str): 群組ID
         days (str): 星期設定，例如 "mon,thu"
         hour (int): 小時 (0-23)
         minute (int): 分鐘 (0-59)
@@ -1188,11 +1169,11 @@ def update_schedule(days=None, hour=None, minute=None):
     Returns:
         dict: 操作結果
     """
-    global job
+    global group_jobs, group_schedules
     
     try:
         # 取得目前設定
-        current_info = get_schedule_info()
+        current_info = get_schedule_info(group_id)
         
         # 使用提供的參數或保持目前設定
         if days is None and current_info["is_configured"]:
@@ -1224,13 +1205,14 @@ def update_schedule(days=None, hour=None, minute=None):
             return {"success": False, "message": "星期格式無效，請使用 mon,tue,wed,thu,fri,sat,sun"}
         
         # 移除舊排程
-        if job:
-            job.remove()
+        if group_id in group_jobs:
+            group_jobs[group_id].remove()
+            del group_jobs[group_id]
         
         # 建立新排程，明確指定時區
         from apscheduler.triggers.cron import CronTrigger
         job = scheduler.add_job(
-            send_trash_reminder, 
+            lambda: send_group_reminder(group_id), 
             CronTrigger(
                 day_of_week=days, 
                 hour=hour, 
@@ -1239,95 +1221,149 @@ def update_schedule(days=None, hour=None, minute=None):
             )
         )
         
+        # 儲存排程任務和設定
+        group_jobs[group_id] = job
+        group_schedules[group_id] = {
+            "days": days,
+            "hour": hour,
+            "minute": minute
+        }
+        
+        # 儲存到檔案
+        save_group_schedules(group_schedules)
+        
         return {
             "success": True,
-            "message": f"推播時間已更新為 {days} {hour:02d}:{minute:02d}",
+            "message": f"群組 {group_id} 推播時間已更新為 {days} {hour:02d}:{minute:02d}",
             "schedule": {
                 "days": days,
                 "time": f"{hour:02d}:{minute:02d}",
-                "next_run": job.next_run_time.strftime('%Y-%m-%d %H:%M:%S %Z') if job.next_run_time else "未知"
+                "next_run": job.next_run_time.strftime('%Y-%m-%d %H:%M:%S %Z') if job.next_run_time else "未知",
+                "group_id": group_id
             }
         }
         
     except Exception as e:
-        return {"success": False, "message": f"更新排程失敗: {str(e)}", "error": str(e)}
+        return {"success": False, "message": f"更新群組 {group_id} 排程失敗: {str(e)}", "error": str(e)}
 
-def get_schedule_summary():
+def send_group_reminder(group_id):
+    """
+    發送特定群組的垃圾收集提醒
+    
+    Args:
+        group_id (str): 群組ID
+    """
+    try:
+        # 取得該群組的當前負責人
+        current_members = get_current_group(group_id)
+        
+        if not current_members:
+            print(f"群組 {group_id} 沒有設定成員")
+            return
+        
+        # 取得當前週數和日期資訊
+        today = datetime.now(pytz.timezone('Asia/Taipei')).date()
+        current_week = get_current_week()
+        
+        # 格式化日期和星期
+        weekday_names = ["週一", "週二", "週三", "週四", "週五", "週六", "週日"]
+        weekday = weekday_names[today.weekday()]
+        date_str = f"{today.month}/{today.day}"
+        
+        # 建立提醒訊息
+        if len(current_members) == 1:
+            message = f"🗑️ 今天 {date_str} ({weekday}) 輪到 {current_members[0]} 收垃圾！"
+        else:
+            members_str = "、".join(current_members)
+            message = f"🗑️ 今天 {date_str} ({weekday}) 輪到 {members_str} 收垃圾！"
+        
+        print(f"群組 {group_id} 推播訊息: {message}")
+        
+        # 發送推播到該群組
+        if LINE_CHANNEL_ACCESS_TOKEN:
+            url = 'https://api.line.me/v2/bot/message/push'
+            headers = {
+                'Authorization': f'Bearer {LINE_CHANNEL_ACCESS_TOKEN}',
+                'Content-Type': 'application/json'
+            }
+            
+            data = {
+                'to': group_id,
+                'messages': [{'type': 'text', 'text': message}]
+            }
+            
+            print(f"建立推播請求: to={group_id}, message_length={len(message)}")
+            
+            response = requests.post(url, headers=headers, json=data)
+            print(f"推播成功 - Response: {response}")
+        else:
+            print("LINE_CHANNEL_ACCESS_TOKEN 未設定，僅印出訊息")
+            
+    except Exception as e:
+        print(f"群組 {group_id} 推播失敗: {e}")
+
+def get_schedule_summary(group_id=None):
     """
     取得排程的簡要摘要，用於顯示給使用者
     
+    Args:
+        group_id (str): 群組ID，如果為 None 則顯示所有群組的排程
+        
     Returns:
         str: 格式化的排程摘要字串
     """
-    info = get_schedule_info()
-    
-    if not info["is_configured"]:
-        return "❌ 排程未設定"
-    
-    details = info["schedule_details"]
-    if not details:
-        return "❌ 無法取得排程詳情"
-    
-    # 格式化星期顯示
-    days = details.get("days", "未知")
-    day_mapping = {
-        "mon": "週一", "tue": "週二", "wed": "週三", "thu": "週四",
-        "fri": "週五", "sat": "周六", "sun": "週日"
-    }
-    
-    if "," in days:
-        day_list = [day_mapping.get(d.strip(), d.strip()) for d in days.split(",")]
-        days_chinese = "、".join(day_list)
-    else:
-        days_chinese = day_mapping.get(days, days)
-    
-    time_str = details.get("time", "未知")
-    timezone_str = details.get("timezone", "未知")
-    next_run = info.get("next_run_time", "未知")
-    
-    # 計算距離下次執行的時間
-    from datetime import datetime
-    import pytz
-    
-    try:
-        taipei_tz = pytz.timezone('Asia/Taipei')
-        now = datetime.now(taipei_tz)
+    if group_id:
+        # 顯示特定群組的排程
+        info = get_schedule_info(group_id)
         
-        # 解析下次執行時間
-        if job and job.next_run_time:
-            # job.next_run_time 已經是有時區的 datetime 物件
-            time_diff = job.next_run_time - now
-            total_seconds = time_diff.total_seconds()
-            
-            if total_seconds > 0:
-                hours = int(total_seconds // 3600)
-                minutes = int((total_seconds % 3600) // 60)
-                
-                if hours > 24:
-                    days = hours // 24
-                    hours = hours % 24
-                    time_until = f"{days} 天 {hours} 小時 {minutes} 分鐘"
-                elif hours > 0:
-                    time_until = f"{hours} 小時 {minutes} 分鐘"
-                else:
-                    time_until = f"{minutes} 分鐘"
-            else:
-                time_until = "即將執行"
+        if not info["is_configured"]:
+            return f"❌ 群組 {group_id} 排程未設定"
+        
+        details = info["schedule_details"]
+        if not details:
+            return f"❌ 無法取得群組 {group_id} 排程詳情"
+        
+        # 格式化星期顯示
+        days = details.get("days", "未知")
+        day_mapping = {
+            "mon": "週一", "tue": "週二", "wed": "週三", "thu": "週四",
+            "fri": "週五", "sat": "週六", "sun": "週日"
+        }
+        
+        if "," in days:
+            day_list = [day_mapping.get(d.strip(), d.strip()) for d in days.split(",")]
+            days_chinese = "、".join(day_list)
         else:
-            time_until = "無法計算"
-    except Exception as e:
-        time_until = f"計算錯誤: {str(e)}"
-    
-    summary = f"""📅 垃圾收集提醒排程
+            days_chinese = day_mapping.get(days.strip(), days.strip())
+        
+        # 格式化時間顯示
+        hour = details.get("hour", 0)
+        minute = details.get("minute", 0)
+        time_str = f"{hour:02d}:{minute:02d}"
+        
+        # 下次執行時間
+        next_run = info.get("next_run_time", "未知")
+        
+        summary = f"""📅 群組 {group_id} 垃圾收集提醒排程
 
-🕐 執行時間: {time_str} ({timezone_str})
+🕐 執行時間: {time_str} (Asia/Taipei)
 📆 執行星期: {days_chinese}
 ⏰ 下次執行: {next_run}
-⏳ 距離下次: {time_until}
 
 ✅ 排程狀態: 已啟動"""
-    
-    return summary
+        
+        return summary
+    else:
+        # 顯示所有群組的排程摘要
+        if not group_schedules:
+            return "❌ 尚未設定任何群組排程"
+        
+        summary = "📅 所有群組垃圾收集提醒排程\n\n"
+        for gid in group_schedules:
+            group_summary = get_schedule_summary(gid)
+            summary += group_summary + "\n" + "="*40 + "\n"
+        
+        return summary.rstrip("\n=")
 
 def send_trash_reminder():
     today = date.today()
@@ -1415,18 +1451,43 @@ def send_trash_reminder():
 from apscheduler.triggers.cron import CronTrigger
 import pytz
 scheduler = BackgroundScheduler(timezone=pytz.timezone('Asia/Taipei'))
-job = scheduler.add_job(
-    send_trash_reminder, 
-    CronTrigger(
-        day_of_week="mon,thu", 
-        hour=17, 
-        minute=10,
-        timezone=pytz.timezone('Asia/Taipei')  # 明確指定時區
-    )
-)
+group_jobs = {}  # 儲存每個群組的推播任務
+
+def initialize_group_schedules():
+    """初始化群組排程設定"""
+    global group_schedules, group_jobs
+    
+    # 為所有現有群組設定預設排程（如果尚未設定）
+    for group_id in group_ids:
+        if group_id not in group_schedules:
+            # 設定預設排程：週一、週四 17:10
+            print(f"為群組 {group_id} 設定預設排程")
+            result = update_schedule(group_id, "mon,thu", 17, 10)
+            if result["success"]:
+                print(f"群組 {group_id} 預設排程設定成功")
+            else:
+                print(f"群組 {group_id} 預設排程設定失敗: {result['message']}")
+    
+    # 為已存在於 group_schedules 的群組重新建立排程任務
+    for group_id, config in group_schedules.items():
+        if group_id not in group_jobs:
+            print(f"重新建立群組 {group_id} 的排程任務")
+            result = update_schedule(
+                group_id, 
+                config.get("days", "mon,thu"),
+                config.get("hour", 17), 
+                config.get("minute", 10)
+            )
+            if result["success"]:
+                print(f"群組 {group_id} 排程任務重建成功")
+            else:
+                print(f"群組 {group_id} 排程任務重建失敗: {result['message']}")
+
+# 初始化排程
+initialize_group_schedules()
 scheduler.start()
 
-print(f"排程已啟動，下次執行時間: {job.next_run_time}")
+print(f"排程已啟動，目前有 {len(group_jobs)} 個群組排程")
 from datetime import datetime
 print(f"當前時間: {datetime.now(pytz.timezone('Asia/Taipei'))}")
 
@@ -1469,7 +1530,6 @@ def callback():
 # ===== 處理訊息事件 =====
 @handler.add(MessageEvent)
 def handle_message(event):
-    global job
     # 使用者設定推播星期、時、分指令
     if event.message.text.strip().startswith("@setcron"):
         import re
@@ -1530,29 +1590,23 @@ def handle_message(event):
         m = re.match(r"@setday ([a-z,]+)", event.message.text.strip())
         if m:
             days = m.group(1)
-            # 取得目前排程時間
-            current_info = get_schedule_info()
-            if current_info["is_configured"] and current_info["schedule_details"]:
-                hour = current_info["schedule_details"]["hour"]
-                minute = current_info["schedule_details"]["minute"]
-            else:
-                hour = 17  # 預設值
-                minute = 10  # 預設值
+            group_id = get_group_id_from_event(event)
             
-            job.remove()
-            job = scheduler.add_job(
-                send_trash_reminder, 
-                CronTrigger(
-                    day_of_week=days, 
-                    hour=hour, 
-                    minute=minute,
-                    timezone=pytz.timezone('Asia/Taipei')  # 明確指定時區
-                )
-            )
+            if group_id:
+                # 更新該群組的排程設定
+                result = update_schedule(group_id, days=days)
+                
+                if result["success"]:
+                    message = f"✅ 群組推播星期已更新為 {days}\n⏰ {result['schedule']['next_run']}"
+                else:
+                    message = f"❌ 設定失敗: {result['message']}"
+            else:
+                message = "❌ 無法取得群組資訊"
+            
             from linebot.v3.messaging.models import ReplyMessageRequest
             req = ReplyMessageRequest(
                 reply_token=event.reply_token,
-                messages=[TextMessage(text=f"✅ 推播星期已更新為 {days}\n⏰ 下次執行: {job.next_run_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")]
+                messages=[TextMessage(text=message)]
             )
             messaging_api.reply_message(req)
         else:
@@ -1594,27 +1648,23 @@ def handle_message(event):
                     messaging_api.reply_message(req)
                     return
                 
-                # 取得目前的星期設定
-                current_info = get_schedule_info()
-                if current_info["is_configured"] and current_info["schedule_details"]:
-                    days = current_info["schedule_details"]["days"]
-                else:
-                    days = "mon,thu"  # 預設值
+                group_id = get_group_id_from_event(event)
                 
-                job.remove()
-                job = scheduler.add_job(
-                    send_trash_reminder, 
-                    CronTrigger(
-                        day_of_week=days, 
-                        hour=hour, 
-                        minute=minute,
-                        timezone=pytz.timezone('Asia/Taipei')  # 明確指定時區
-                    )
-                )
+                if group_id:
+                    # 更新該群組的排程設定
+                    result = update_schedule(group_id, hour=hour, minute=minute)
+                    
+                    if result["success"]:
+                        message = f"✅ 群組推播時間已更新為 {hour:02d}:{minute:02d} (台北時間)\n⏰ {result['schedule']['next_run']}"
+                    else:
+                        message = f"❌ 設定失敗: {result['message']}"
+                else:
+                    message = "❌ 無法取得群組資訊"
+                
                 from linebot.v3.messaging.models import ReplyMessageRequest
                 req = ReplyMessageRequest(
                     reply_token=event.reply_token,
-                    messages=[TextMessage(text=f"✅ 推播時間已更新為 {hour:02d}:{minute:02d} (台北時間)\n⏰ 下次執行: {job.next_run_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")]
+                    messages=[TextMessage(text=message)]
                 )
                 messaging_api.reply_message(req)
             else:
@@ -1670,20 +1720,13 @@ def handle_message(event):
         
         # 顯示推播排程資訊
         if event.message.text.strip() == "@schedule":
-            schedule_info = get_schedule_info()
+            group_id = get_group_id_from_event(event)
             
-            if schedule_info["is_configured"]:
-                details = schedule_info["schedule_details"]
-                response_text = f"⏰ 目前推播排程：\n\n"
-                response_text += f"📅 星期：{details['days']}\n"
-                response_text += f"🕐 時間：{details['time']}\n"
-                response_text += f"🌏 時區：{details['timezone']}\n"
-                response_text += f"📋 Cron：{schedule_info['cron_expression']}\n\n"
-                response_text += f"⏭️ 下次執行：\n{schedule_info['next_run_time']}"
+            if group_id:
+                schedule_summary = get_schedule_summary(group_id)
+                response_text = schedule_summary
             else:
-                response_text = f"❌ {schedule_info['message']}"
-                if "error" in schedule_info:
-                    response_text += f"\n錯誤：{schedule_info['error']}"
+                response_text = "❌ 無法取得群組資訊"
             
             from linebot.v3.messaging.models import ReplyMessageRequest
             req = ReplyMessageRequest(
