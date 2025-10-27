@@ -4,7 +4,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from linebot.v3.messaging import MessagingApi, Configuration, ApiClient
 from linebot.v3.webhook import WebhookHandler, MessageEvent
 from linebot.v3.messaging.models import PushMessageRequest, TextMessage
-from linebot.v3.messaging.models import PushMessageRequest, TextMessage
+from linebot.v3.webhooks import TextMessageContent
 import os
 import json
 
@@ -838,17 +838,22 @@ def send_trash_reminder():
     
     # 移除週一四限制，根據排程執行
     group = get_current_group()
+    print(f"DEBUG: 當前群組成員: {group}")
     
-    # 根據星期決定誰收垃圾（可自訂規則）
-    # 週一=0, 週二=1, 週三=2, 週四=3, 週五=4, 週六=5, 週日=6
-    if weekday in [0, 3]:  # 週一、週四 -> 第一個人
-        person = group[0]
-    elif weekday in [1, 4]:  # 週二、週五 -> 第二個人  
-        person = group[1]
-    else:  # 其他天數可自訂規則
-        person = group[weekday % len(group)]  # 輪流
-    
-    message = f"🗑️ 今天 {today.strftime('%m/%d')} ({weekday_names[weekday]}) 輪到 {person} 收垃圾！"
+    if not group:
+        message = f"🗑️ 今天 {today.strftime('%m/%d')} ({weekday_names[weekday]}) 是收垃圾日！\n💡 請設定成員輪值表"
+        person = "未設定成員"
+    else:
+        # 根據星期決定誰收垃圾（可自訂規則）
+        # 週一=0, 週二=1, 週三=2, 週四=3, 週五=4, 週六=5, 週日=6
+        if weekday in [0, 3]:  # 週一、週四 -> 第一個人
+            person = group[0] if len(group) > 0 else "無成員"
+        elif weekday in [1, 4]:  # 週二、週五 -> 第二個人  
+            person = group[1] if len(group) > 1 else group[0] if len(group) > 0 else "無成員"
+        else:  # 其他天數可自訂規則
+            person = group[weekday % len(group)] if group else "無成員"
+        
+        message = f"🗑️ 今天 {today.strftime('%m/%d')} ({weekday_names[weekday]}) 輪到 {person} 收垃圾！"
     
     print(f"DEBUG: 準備推播訊息: {message}")
     print(f"DEBUG: 群組 IDs: {group_ids}")
@@ -859,23 +864,52 @@ def send_trash_reminder():
         return
 
     for gid in group_ids:
-        # 驗證群組 ID 格式
-        if gid and gid.startswith("C") and len(gid) > 10:
-            print(f"DEBUG: 推播到群組 {gid}")
-            try:
-                req = PushMessageRequest(
-                    to=gid,
-                    messages=[TextMessage(text=message)]
-                )
-                response = messaging_api.push_message(req)
-                print(f"DEBUG: 推播成功 - Response: {response}")
-            except Exception as e:
-                print(f"DEBUG: 推播失敗 - {type(e).__name__}: {e}")
-                import traceback
-                print(f"DEBUG: 完整錯誤: {traceback.format_exc()}")
-        else:
-            print(f"DEBUG: 群組 ID 格式無效: {gid}")
-            print("DEBUG: LINE 群組 ID 應該以 'C' 開頭，例如: C1234567890abcdef...")
+        # 驗證群組 ID 格式並詳細記錄
+        print(f"DEBUG: 檢查群組 ID: '{gid}' (長度: {len(gid) if gid else 0})")
+        
+        if not gid:
+            print(f"DEBUG: 群組 ID 為空")
+            continue
+            
+        if not isinstance(gid, str):
+            print(f"DEBUG: 群組 ID 不是字串類型: {type(gid)}")
+            continue
+            
+        if not gid.startswith("C"):
+            print(f"DEBUG: 群組 ID 不以 'C' 開頭: {gid}")
+            continue
+            
+        if len(gid) <= 10:
+            print(f"DEBUG: 群組 ID 長度不足 (需要 > 10): {len(gid)}")
+            continue
+            
+        # 群組 ID 格式正確，開始推播
+        print(f"DEBUG: 推播到群組 {gid}")
+        try:
+            # 檢查 messaging_api 是否已初始化
+            if not messaging_api:
+                print("DEBUG: MessagingApi 未初始化，請檢查 LINE_CHANNEL_ACCESS_TOKEN")
+                continue
+                
+            req = PushMessageRequest(
+                to=gid,
+                messages=[TextMessage(text=message)]
+            )
+            print(f"DEBUG: 建立推播請求: to={gid}, message_length={len(message)}")
+            
+            response = messaging_api.push_message(req)
+            print(f"DEBUG: 推播成功 - Response: {response}")
+        except Exception as e:
+            print(f"DEBUG: 推播失敗 - {type(e).__name__}: {e}")
+            # 特別處理 LINE API 錯誤
+            if "invalid" in str(e).lower() and "to" in str(e).lower():
+                print(f"DEBUG: 群組 ID '{gid}' 可能無效或 Bot 未加入該群組")
+                print(f"DEBUG: 請確認:")
+                print(f"DEBUG: 1. Bot 已加入群組 {gid}")
+                print(f"DEBUG: 2. 群組 ID 正確 (可用 @debug 指令重新取得)")
+            import traceback
+            print(f"DEBUG: 完整錯誤: {traceback.format_exc()}")
+    
     print(message)
 
 # ===== 啟動排程（每週一、四下午 5:10）=====
