@@ -4,7 +4,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from linebot.v3.messaging import MessagingApi, Configuration, ApiClient
 from linebot.v3.webhook import WebhookHandler, MessageEvent
 from linebot.v3.messaging.models import PushMessageRequest, TextMessage
-from linebot.v3.webhooks import TextMessageContent
+from linebot.v3.webhooks import TextMessageContent, JoinEvent, LeaveEvent
 import os
 import json
 
@@ -1797,6 +1797,68 @@ def handle_message(event):
                 messages=[TextMessage(text=help_text)]
             )
             messaging_api.reply_message(req)
+
+@handler.add(JoinEvent)
+def handle_join(event):
+    """處理 Bot 加入群組事件，自動記錄群組 ID"""
+    try:
+        # 取得群組 ID
+        group_id = event.source.group_id
+        
+        # 載入現有的群組 ID 列表
+        global group_ids
+        
+        # 檢查是否已經存在
+        if group_id not in group_ids:
+            group_ids.append(group_id)
+            save_group_ids()
+            
+            # 發送歡迎訊息並告知群組 ID 已記錄
+            welcome_msg = f"""🤖 歡迎使用垃圾收集提醒 Bot！
+
+✅ 群組 ID 已自動記錄：{group_id[:8]}...
+
+🚀 快速開始：
+@settime 18:00 - 設定提醒時間
+@setweek 1 姓名1,姓名2 - 設定輪值成員
+@help - 查看完整指令
+
+💡 提示：所有設定都會自動儲存，重啟後不會遺失！"""
+            
+            from linebot.v3.messaging.models import PushMessageRequest
+            req = PushMessageRequest(
+                to=group_id,
+                messages=[TextMessage(text=welcome_msg)]
+            )
+            messaging_api.push_message(req)
+            
+            print(f"Bot 加入新群組，已記錄群組 ID: {group_id}")
+        else:
+            print(f"Bot 重新加入已知群組: {group_id}")
+            
+    except Exception as e:
+        print(f"處理 Bot 加入群組事件時發生錯誤: {e}")
+
+@handler.add(LeaveEvent)
+def handle_leave(event):
+    """處理 Bot 離開群組事件，自動移除群組 ID"""
+    try:
+        # 取得群組 ID
+        group_id = event.source.group_id
+        
+        # 載入現有的群組 ID 列表
+        global group_ids
+        
+        # 檢查並移除群組 ID
+        if group_id in group_ids:
+            group_ids.remove(group_id)
+            save_group_ids()
+            print(f"Bot 離開群組，已移除群組 ID: {group_id}")
+        else:
+            print(f"Bot 離開未知群組: {group_id}")
+            
+    except Exception as e:
+        print(f"處理 Bot 離開群組事件時發生錯誤: {e}")
 
 if __name__ == "__main__":
     import os
