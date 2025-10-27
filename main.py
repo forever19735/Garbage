@@ -12,10 +12,8 @@ import json
 try:
     from dotenv import load_dotenv
     load_dotenv()
-    print("DEBUG: .env 檔案已載入")
 except ImportError:
     # 在生產環境中（如 Railway）沒有 python-dotenv，直接忽略
-    print("DEBUG: 未安裝 python-dotenv，跳過 .env 檔案載入")
     pass
 
 app = Flask(__name__)
@@ -32,10 +30,9 @@ def load_group_ids():
         if os.path.exists(GROUP_IDS_FILE):
             with open(GROUP_IDS_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                print(f"DEBUG: 已載入 {len(data)} 個群組 ID")
                 return data
     except Exception as e:
-        print(f"DEBUG: 載入群組 ID 檔案時發生錯誤: {e}")
+        pass
     return []
 
 def save_group_ids():
@@ -43,9 +40,8 @@ def save_group_ids():
     try:
         with open(GROUP_IDS_FILE, 'w', encoding='utf-8') as f:
             json.dump(group_ids, f, ensure_ascii=False, indent=2)
-        print(f"DEBUG: 已儲存 {len(group_ids)} 個群組 ID 到檔案")
     except Exception as e:
-        print(f"DEBUG: 儲存群組 ID 檔案時發生錯誤: {e}")
+        pass
 
 def load_groups():
     """從檔案載入成員群組資料"""
@@ -53,10 +49,9 @@ def load_groups():
         if os.path.exists(GROUPS_FILE):
             with open(GROUPS_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                print(f"DEBUG: 已載入 {len(data)} 週的成員資料")
                 return data
     except Exception as e:
-        print(f"DEBUG: 載入成員群組檔案時發生錯誤: {e}")
+        pass
     return {}
 
 def save_groups():
@@ -64,9 +59,8 @@ def save_groups():
     try:
         with open(GROUPS_FILE, 'w', encoding='utf-8') as f:
             json.dump(groups, f, ensure_ascii=False, indent=2)
-        print(f"DEBUG: 已儲存 {len(groups)} 週的成員資料到檔案")
     except Exception as e:
-        print(f"DEBUG: 儲存成員群組檔案時發生錯誤: {e}")
+        pass
 
 def load_base_date():
     """從檔案載入基準日期"""
@@ -76,10 +70,9 @@ def load_base_date():
                 data = json.load(f)
                 from datetime import datetime
                 base_date = datetime.fromisoformat(data["base_date"]).date()
-                print(f"DEBUG: 已載入基準日期: {base_date}")
                 return base_date
     except Exception as e:
-        print(f"DEBUG: 載入基準日期檔案時發生錯誤: {e}")
+        pass
     return None
 
 def save_base_date(base_date):
@@ -91,9 +84,8 @@ def save_base_date(base_date):
         }
         with open(BASE_DATE_FILE, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-        print(f"DEBUG: 已儲存基準日期: {base_date}")
     except Exception as e:
-        print(f"DEBUG: 儲存基準日期檔案時發生錯誤: {e}")
+        pass
 
 def reset_base_date():
     """重置基準日期"""
@@ -102,10 +94,8 @@ def reset_base_date():
     try:
         if os.path.exists(BASE_DATE_FILE):
             os.remove(BASE_DATE_FILE)
-        print("DEBUG: 已重置基準日期")
     except Exception as e:
-        print(f"DEBUG: 重置基準日期時發生錯誤: {e}")
-
+        pass
 # ===== LINE Bot 設定 =====
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
@@ -138,7 +128,7 @@ if not LINE_CHANNEL_ACCESS_TOKEN or not LINE_CHANNEL_SECRET:
     print("請設定以下環境變數：")
     print("- LINE_CHANNEL_ACCESS_TOKEN")
     print("- LINE_CHANNEL_SECRET")
-    print("- LINE_GROUP_ID (可選，可透過 @debug 指令自動取得)")
+    print("- LINE_GROUP_ID (可選，Bot 加入群組會自動記錄)")
     
     # 在本地測試時，如果環境變數未設定，就不初始化 LINE Bot API
     if not LINE_CHANNEL_ACCESS_TOKEN:
@@ -173,7 +163,6 @@ def get_current_group():
     if base_date is None:
         base_date = today
         save_base_date(base_date)
-        print(f"DEBUG: 自動設定基準日期為今天: {base_date}")
     
     # 計算基準日期所在自然週的星期一
     base_monday = base_date - timedelta(days=base_date.weekday())
@@ -188,10 +177,6 @@ def get_current_group():
     total_weeks = len(groups)
     current_week = (weeks_diff % total_weeks) + 1
     
-    print(f"DEBUG: 基準日期: {base_date} (基準週一: {base_monday})")
-    print(f"DEBUG: 今天: {today} (今天週一: {today_monday})")
-    print(f"DEBUG: 相差自然週數: {weeks_diff}")
-    print(f"DEBUG: 總週數: {total_weeks}, 當前週: {current_week}")
     
     week_key = str(current_week)
     return groups.get(week_key, [])
@@ -292,7 +277,6 @@ def update_member_schedule(week_num, members):
     if len(groups) == 0 and base_date is None:
         base_date = date.today()
         save_base_date(base_date)
-        print(f"DEBUG: 首次設定成員，記錄基準日期: {base_date}")
     
     # 更新指定週的成員
     groups[str(week_num)] = members.copy()
@@ -333,7 +317,6 @@ def add_member_to_week(week_num, member_name):
     if len(groups) == 0 and base_date is None:
         base_date = date.today()
         save_base_date(base_date)
-        print(f"DEBUG: 首次設定成員，記錄基準日期: {base_date}")
     
     # 初始化週數鍵值
     week_key = str(week_num)
@@ -735,14 +718,14 @@ mon, tue, wed, thu, fri, sat, sun
 @info - 顯示詳細群組資訊
 
 ⚙️ 管理群組：
-@debug - 自動添加當前群組 ID
+💡 將 Bot 加入群組會自動記錄群組 ID
 💡 在想要接收提醒的群組中輸入此指令
 
 �️ 清空功能：
 @clear_groups - 清空所有群組 ID
 
 �📊 群組資訊說明：
-- 每個群組只需執行一次 @debug
+- Bot 加入群組時會自動記錄
 - 支援多個群組同時接收提醒
 - 群組 ID 以 'C' 開頭"""
 
@@ -802,7 +785,6 @@ mon, tue, wed, thu, fri, sat, sun
 @members - 查看成員輪值表
 @groups - 查看群組設定
 @status - 查看系統狀態
-@debug - 添加群組 ID
 
 ⚙️ 快速設定：
 @settime 18:30 - 設定推播時間
@@ -838,7 +820,7 @@ mon, tue, wed, thu, fri, sat, sun
 @help 類別名稱
 
 🏃‍♂️ 新手快速開始：
-1. 在群組中輸入 @debug (添加群組)
+1. 將 Bot 加入群組 (自動記錄群組)
 2. 輸入 @settime 18:00 (設定提醒時間)
 3. 輸入 @setweek 1 姓名1,姓名2 (設定成員)
 4. 輸入 @status (查看設定狀態)"""
@@ -853,7 +835,7 @@ def get_command_examples():
     return """📚 指令範例集
 
 🏃‍♂️ 快速開始：
-1. @debug - 在群組中添加群組 ID
+1. 將 Bot 加入群組 - 自動記錄群組 ID
 2. @settime 18:00 - 設定晚上6點推播
 3. @setweek 1 Alice,Bob - 設定第1週成員
 4. @status - 查看設定狀態
@@ -871,8 +853,8 @@ def get_command_examples():
 @removemember 2 小強 - 第2週移除小強
 
 📱 多群組設定：
-在群組A輸入：@debug
-在群組B輸入：@debug
+將 Bot 加入群組A - 自動記錄
+將 Bot 加入群組B - 自動記錄
 兩個群組都會收到提醒
 
 🧪 驗證流程：
@@ -1229,11 +1211,11 @@ def send_trash_reminder():
     today = date.today()
     weekday = today.weekday()  # 0=週一, 1=週二, ..., 6=週日
     weekday_names = ['週一', '週二', '週三', '週四', '週五', '週六', '週日']
-    print(f"DEBUG: 今天是 {today.strftime('%m/%d')}, {weekday_names[weekday]} (weekday={weekday})")
+    print(f"今天是 {today.strftime('%m/%d')}, {weekday_names[weekday]} (weekday={weekday})")
     
     # 移除週一四限制，根據排程執行
     group = get_current_group()
-    print(f"DEBUG: 當前群組成員: {group}")
+    print(f"當前群組成員: {group}")
     
     if not group:
         message = f"🗑️ 今天 {today.strftime('%m/%d')} ({weekday_names[weekday]}) 是收垃圾日！\n💡 請設定成員輪值表"
@@ -1250,60 +1232,59 @@ def send_trash_reminder():
         
         message = f"🗑️ 今天 {today.strftime('%m/%d')} ({weekday_names[weekday]}) 輪到 {person} 收垃圾！"
     
-    print(f"DEBUG: 準備推播訊息: {message}")
-    print(f"DEBUG: 群組 IDs: {group_ids}")
+    print(f"準備推播訊息: {message}")
+    print(f"群組 IDs: {group_ids}")
 
     if not group_ids:
-        print("DEBUG: 沒有設定任何群組 ID，無法推播")
-        print("DEBUG: 請在群組中輸入 @debug 指令來自動添加群組 ID")
+        print("沒有設定任何群組 ID，無法推播")
+        print("請將 Bot 加入群組，Bot 會自動記錄群組 ID")
         return
 
     for gid in group_ids:
         # 驗證群組 ID 格式並詳細記錄
-        print(f"DEBUG: 檢查群組 ID: '{gid}' (長度: {len(gid) if gid else 0})")
+        print(f"正在處理群組 ID: {gid}")
         
         if not gid:
-            print(f"DEBUG: 群組 ID 為空")
+            print(f"跳過空的群組 ID")
             continue
             
         if not isinstance(gid, str):
-            print(f"DEBUG: 群組 ID 不是字串類型: {type(gid)}")
+            print(f"跳過非字串群組 ID: {type(gid)}")
             continue
             
         if not gid.startswith("C"):
-            print(f"DEBUG: 群組 ID 不以 'C' 開頭: {gid}")
+            print(f"跳過無效格式群組 ID: {gid}")
             continue
             
         if len(gid) <= 10:
-            print(f"DEBUG: 群組 ID 長度不足 (需要 > 10): {len(gid)}")
+            print(f"跳過過短的群組 ID: {gid}")
             continue
             
         # 群組 ID 格式正確，開始推播
-        print(f"DEBUG: 推播到群組 {gid}")
         try:
             # 檢查 messaging_api 是否已初始化
             if not messaging_api:
-                print("DEBUG: MessagingApi 未初始化，請檢查 LINE_CHANNEL_ACCESS_TOKEN")
+                print("MessagingApi 未初始化，請檢查 LINE_CHANNEL_ACCESS_TOKEN")
                 continue
                 
             req = PushMessageRequest(
                 to=gid,
                 messages=[TextMessage(text=message)]
             )
-            print(f"DEBUG: 建立推播請求: to={gid}, message_length={len(message)}")
+            print(f"建立推播請求: to={gid}, message_length={len(message)}")
             
             response = messaging_api.push_message(req)
-            print(f"DEBUG: 推播成功 - Response: {response}")
+            print(f"推播成功 - Response: {response}")
         except Exception as e:
-            print(f"DEBUG: 推播失敗 - {type(e).__name__}: {e}")
+            print(f"推播失敗 - {type(e).__name__}: {e}")
             # 特別處理 LINE API 錯誤
             if "invalid" in str(e).lower() and "to" in str(e).lower():
-                print(f"DEBUG: 群組 ID '{gid}' 可能無效或 Bot 未加入該群組")
-                print(f"DEBUG: 請確認:")
-                print(f"DEBUG: 1. Bot 已加入群組 {gid}")
-                print(f"DEBUG: 2. 群組 ID 正確 (可用 @debug 指令重新取得)")
+                print(f"群組 ID '{gid}' 可能無效或 Bot 未加入該群組")
+                print(f"請確認:")
+                print(f"1. Bot 已加入群組 {gid}")
+                print(f"2. 群組 ID 正確 (Bot 加入群組會自動記錄)")
             import traceback
-            print(f"DEBUG: 完整錯誤: {traceback.format_exc()}")
+            print(f"完整錯誤: {traceback.format_exc()}")
     
     print(message)
 
@@ -1322,8 +1303,10 @@ job = scheduler.add_job(
 )
 scheduler.start()
 
-print(f"DEBUG: 排程已啟動，下次執行時間: {job.next_run_time}")
-print(f"DEBUG: 當前時間: {pytz.timezone('Asia/Taipei').localize(datetime.now())}")
+print(f"排程已啟動，下次執行時間: {job.next_run_time}")
+from datetime import datetime
+print(f"當前時間: {datetime.now(pytz.timezone('Asia/Taipei'))}")
+
 
 @app.route("/")
 def index():
@@ -1346,7 +1329,6 @@ def callback():
 # def handle_message(event):
 #     text = event.message.text.strip()
 
-#     if text == "@debug":
 #         gid = getattr(event.source, "group_id", None)
 #         if gid:
 #             line_bot_api.push_message(
@@ -1520,37 +1502,13 @@ def handle_message(event):
                 )
                 messaging_api.reply_message(req)
 
-        if event.message.text.strip() == "@debug":
-            gid = getattr(event.source, "group_id", None)
-            if gid:
-                # 使用新的函數添加群組 ID
-                result = add_line_group_id(gid)
-                if result["success"]:
-                    print(f"DEBUG: 新增群組 ID: {gid}")
-                    response_text = f"✅ 群組ID已添加：{gid}\n目前已設定的群組: {result['total_groups']} 個"
-                else:
-                    response_text = f"ℹ️ {result['message']}\n目前已設定的群組: {len(group_ids)} 個"
-                
-                from linebot.v3.messaging.models import ReplyMessageRequest
-                req = ReplyMessageRequest(
-                    reply_token=event.reply_token,
-                    messages=[TextMessage(text=response_text)]
-                )
-                messaging_api.reply_message(req)
-            else:
-                req = ReplyMessageRequest(
-                    reply_token=event.reply_token,
-                    messages=[TextMessage(text="這不是群組，無法取得群組 ID。")]
-                )
-                messaging_api.reply_message(req)
-        
         # 顯示目前已設定的群組列表
         if event.message.text.strip() == "@groups":
             if group_ids:
                 group_list = "\n".join([f"{i+1}. {gid}" for i, gid in enumerate(group_ids)])
                 response_text = f"📋 目前已設定的群組 ({len(group_ids)} 個):\n{group_list}"
             else:
-                response_text = "❌ 尚未設定任何群組 ID\n請在群組中輸入 @debug 來添加群組 ID"
+                response_text = "❌ 尚未設定任何群組 ID\n請將 Bot 加入群組，系統會自動記錄群組 ID"
             
             from linebot.v3.messaging.models import ReplyMessageRequest
             req = ReplyMessageRequest(
@@ -1578,7 +1536,7 @@ def handle_message(event):
                     status = "✅" if gid in group_info["valid_ids"] else "❌"
                     response_text += f"{i}. {status} {gid}\n"
             else:
-                response_text = "❌ 尚未設定任何群組 ID\n請在群組中輸入 @debug 來添加群組 ID"
+                response_text = "❌ 尚未設定任何群組 ID\n請將 Bot 加入群組，系統會自動記錄群組 ID"
             
             from linebot.v3.messaging.models import ReplyMessageRequest
             req = ReplyMessageRequest(
@@ -1814,12 +1772,12 @@ def handle_join(event):
             save_group_ids()
             
             # 發送歡迎訊息並告知群組 ID 已記錄
-            welcome_msg = f"""🤖 歡迎使用垃圾收集提醒 Bot！
+            welcome_msg = f"""🤖 歡迎使用垃圾輪值提醒 Bot！
 
 ✅ 群組 ID 已自動記錄：{group_id[:8]}...
 
 🚀 快速開始：
-@settime 18:00 - 設定提醒時間
+@setcron mon,thu 14 55 - 設定提醒星期和時間
 @setweek 1 姓名1,姓名2 - 設定輪值成員
 @help - 查看完整指令
 
