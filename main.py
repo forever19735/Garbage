@@ -73,6 +73,167 @@ def get_current_group():
     week_num = today.isocalendar()[1]  # 第幾週
     return groups[(week_num - 1) % len(groups)]
 
+# ===== 成員輪值管理函數 =====
+def get_member_schedule():
+    """
+    取得目前的成員輪值安排
+    
+    Returns:
+        dict: 包含成員輪值資訊的字典
+    """
+    schedule_info = {
+        "total_weeks": len(groups),
+        "current_week": (date.today().isocalendar()[1] - 1) % len(groups) + 1,
+        "weeks": []
+    }
+    
+    for i, week_members in enumerate(groups, 1):
+        week_info = {
+            "week": i,
+            "members": week_members.copy(),
+            "member_count": len(week_members),
+            "is_current": i == schedule_info["current_week"]
+        }
+        schedule_info["weeks"].append(week_info)
+    
+    current_group = get_current_group()
+    schedule_info["current_members"] = current_group.copy()
+    
+    return schedule_info
+
+def update_member_schedule(week_num, members):
+    """
+    更新指定週的成員安排
+    
+    Args:
+        week_num (int): 週數 (1-based)
+        members (list): 成員列表
+        
+    Returns:
+        dict: 操作結果
+    """
+    global groups
+    
+    if not isinstance(week_num, int) or week_num < 1:
+        return {"success": False, "message": "週數必須是大於 0 的整數"}
+    
+    if not isinstance(members, list) or len(members) == 0:
+        return {"success": False, "message": "成員列表不能為空"}
+    
+    # 確保 groups 有足夠的週數
+    while len(groups) < week_num:
+        groups.append([])
+    
+    # 更新指定週的成員
+    groups[week_num - 1] = members.copy()
+    
+    return {
+        "success": True,
+        "message": f"第 {week_num} 週成員已更新為: {', '.join(members)}",
+        "week": week_num,
+        "members": members.copy(),
+        "total_weeks": len(groups)
+    }
+
+def add_member_to_week(week_num, member_name):
+    """
+    添加成員到指定週
+    
+    Args:
+        week_num (int): 週數 (1-based)
+        member_name (str): 成員名稱
+        
+    Returns:
+        dict: 操作結果
+    """
+    global groups
+    
+    if not isinstance(week_num, int) or week_num < 1:
+        return {"success": False, "message": "週數必須是大於 0 的整數"}
+    
+    if not member_name or not isinstance(member_name, str):
+        return {"success": False, "message": "成員名稱不能為空"}
+    
+    # 確保 groups 有足夠的週數
+    while len(groups) < week_num:
+        groups.append([])
+    
+    # 檢查成員是否已存在
+    if member_name in groups[week_num - 1]:
+        return {"success": False, "message": f"成員 {member_name} 已在第 {week_num} 週"}
+    
+    # 添加成員
+    groups[week_num - 1].append(member_name)
+    
+    return {
+        "success": True,
+        "message": f"成員 {member_name} 已添加到第 {week_num} 週",
+        "week": week_num,
+        "members": groups[week_num - 1].copy(),
+        "total_members": len(groups[week_num - 1])
+    }
+
+def remove_member_from_week(week_num, member_name):
+    """
+    從指定週移除成員
+    
+    Args:
+        week_num (int): 週數 (1-based)
+        member_name (str): 成員名稱
+        
+    Returns:
+        dict: 操作結果
+    """
+    global groups
+    
+    if not isinstance(week_num, int) or week_num < 1 or week_num > len(groups):
+        return {"success": False, "message": f"週數必須在 1-{len(groups)} 之間"}
+    
+    if not member_name or not isinstance(member_name, str):
+        return {"success": False, "message": "成員名稱不能為空"}
+    
+    # 檢查成員是否存在
+    if member_name not in groups[week_num - 1]:
+        return {"success": False, "message": f"成員 {member_name} 不在第 {week_num} 週"}
+    
+    # 移除成員
+    groups[week_num - 1].remove(member_name)
+    
+    return {
+        "success": True,
+        "message": f"成員 {member_name} 已從第 {week_num} 週移除",
+        "week": week_num,
+        "members": groups[week_num - 1].copy(),
+        "total_members": len(groups[week_num - 1])
+    }
+
+def get_member_schedule_summary():
+    """
+    取得成員輪值的簡要摘要，用於顯示給使用者
+    
+    Returns:
+        str: 格式化的成員輪值摘要字串
+    """
+    schedule = get_member_schedule()
+    
+    summary = f"👥 垃圾收集成員輪值表\n\n"
+    summary += f"📅 總共 {schedule['total_weeks']} 週輪值\n"
+    summary += f"📍 目前第 {schedule['current_week']} 週\n\n"
+    
+    for week_info in schedule["weeks"]:
+        week_num = week_info["week"]
+        members = week_info["members"]
+        is_current = week_info["is_current"]
+        
+        status = "👈 本週" if is_current else "　　　"
+        member_list = "、".join(members) if members else "無成員"
+        
+        summary += f"第 {week_num} 週: {member_list} {status}\n"
+    
+    summary += f"\n🗑️ 本週負責: {', '.join(schedule['current_members'])}"
+    
+    return summary
+
 # ===== 取得目前設定的群組 ID =====
 def get_line_group_ids():
     """
@@ -762,6 +923,89 @@ def handle_message(event):
             )
             messaging_api.reply_message(req)
         
+        # 顯示成員輪值表
+        if event.message.text.strip() == "@members":
+            summary = get_member_schedule_summary()
+            from linebot.v3.messaging.models import ReplyMessageRequest
+            req = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=summary)]
+            )
+            messaging_api.reply_message(req)
+        
+        # 設定指定週的成員 - 格式: @setweek 1 成員1,成員2
+        if event.message.text.strip().startswith("@setweek"):
+            import re
+            m = re.match(r"@setweek (\d+) (.+)", event.message.text.strip())
+            if m:
+                week_num = int(m.group(1))
+                members_str = m.group(2)
+                members = [member.strip() for member in members_str.split(",") if member.strip()]
+                
+                result = update_member_schedule(week_num, members)
+                
+                from linebot.v3.messaging.models import ReplyMessageRequest
+                req = ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text=f"{'✅' if result['success'] else '❌'} {result['message']}")]
+                )
+                messaging_api.reply_message(req)
+            else:
+                from linebot.v3.messaging.models import ReplyMessageRequest
+                req = ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text="格式錯誤，請輸入 @setweek 週數 成員1,成員2\n例如: @setweek 1 Alice,Bob")]
+                )
+                messaging_api.reply_message(req)
+        
+        # 添加成員到指定週 - 格式: @addmember 1 成員名
+        if event.message.text.strip().startswith("@addmember"):
+            import re
+            m = re.match(r"@addmember (\d+) (.+)", event.message.text.strip())
+            if m:
+                week_num = int(m.group(1))
+                member_name = m.group(2).strip()
+                
+                result = add_member_to_week(week_num, member_name)
+                
+                from linebot.v3.messaging.models import ReplyMessageRequest
+                req = ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text=f"{'✅' if result['success'] else '❌'} {result['message']}")]
+                )
+                messaging_api.reply_message(req)
+            else:
+                from linebot.v3.messaging.models import ReplyMessageRequest
+                req = ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text="格式錯誤，請輸入 @addmember 週數 成員名\n例如: @addmember 1 Alice")]
+                )
+                messaging_api.reply_message(req)
+        
+        # 從指定週移除成員 - 格式: @removemember 1 成員名
+        if event.message.text.strip().startswith("@removemember"):
+            import re
+            m = re.match(r"@removemember (\d+) (.+)", event.message.text.strip())
+            if m:
+                week_num = int(m.group(1))
+                member_name = m.group(2).strip()
+                
+                result = remove_member_from_week(week_num, member_name)
+                
+                from linebot.v3.messaging.models import ReplyMessageRequest
+                req = ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text=f"{'✅' if result['success'] else '❌'} {result['message']}")]
+                )
+                messaging_api.reply_message(req)
+            else:
+                from linebot.v3.messaging.models import ReplyMessageRequest
+                req = ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text="格式錯誤，請輸入 @removemember 週數 成員名\n例如: @removemember 1 Alice")]
+                )
+                messaging_api.reply_message(req)
+        
         # 測試推播功能
         if event.message.text.strip() == "@test":
             print("DEBUG: 收到 @test 指令，立即執行推播測試")
@@ -770,16 +1014,6 @@ def handle_message(event):
             req = ReplyMessageRequest(
                 reply_token=event.reply_token,
                 messages=[TextMessage(text="已執行推播測試，請查看 log")]
-            )
-            messaging_api.reply_message(req)
-        
-        # 顯示排程摘要
-        if event.message.text.strip() == "@schedule":
-            summary = get_schedule_summary()
-            from linebot.v3.messaging.models import ReplyMessageRequest
-            req = ReplyMessageRequest(
-                reply_token=event.reply_token,
-                messages=[TextMessage(text=summary)]
             )
             messaging_api.reply_message(req)
 
