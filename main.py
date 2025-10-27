@@ -653,7 +653,7 @@ def get_help_message(category=None):
     取得幫助訊息
     
     Args:
-        category (str): 指定類別 ('schedule', 'members', 'groups', 'test')
+        category (str): 指定類別 ('schedule', 'members', 'groups')
         
     Returns:
         str: 格式化的幫助訊息
@@ -742,7 +742,7 @@ mon, tue, wed, thu, fri, sat, sun
 🆘 獲取幫助：
 @help - 顯示所有指令
 @help 類別 - 顯示特定類別指令
-類別：schedule, members, groups, manage, test"""
+類別：schedule, members, groups"""
 
     elif category == "manage":
         return """🔧 管理和重置指令
@@ -777,8 +777,6 @@ mon, tue, wed, thu, fri, sat, sun
 @help schedule - 排程管理指令 (設定提醒時間)
 @help members - 成員管理指令 (輪值安排)
 @help groups - 群組管理指令 (LINE 群組設定)
-@help manage - 管理重置指令 (清空/重置功能)
-@help test - 查看調試指令 (狀態查看)
 
 🔥 常用指令：
 @schedule - 查看推播排程
@@ -1744,10 +1742,10 @@ def handle_message(event):
             else:
                 # @help 類別 - 顯示特定類別
                 category = parts[1].lower()
-                if category in ["schedule", "members", "groups", "test"]:
+                if category in ["schedule", "members", "groups"]:
                     help_text = get_help_message(category)
                 else:
-                    help_text = "❌ 未知類別，請輸入：\n@help schedule\n@help members\n@help groups\n@help test\n@help examples"
+                    help_text = "❌ 未知類別，請輸入：\n@help schedule\n@help members\n@help groups\n@help examples"
             
             from linebot.v3.messaging.models import ReplyMessageRequest
             req = ReplyMessageRequest(
