@@ -177,24 +177,31 @@ def get_schedule_info():
         # 嘗試從觸發器字串解析資訊
         trigger_str = str(trigger)
         
-        # 解析 CronTrigger 資訊 (例如: "cron[day_of_week='1,4', hour='17', minute='10']")
+        # 解析 CronTrigger 資訊 (例如: "cron[day_of_week='mon,thu', hour='17', minute='10']")
         if "day_of_week=" in trigger_str:
             import re
             
             # 解析星期
             day_match = re.search(r"day_of_week='([^']+)'", trigger_str)
             if day_match:
-                days_numbers = day_match.group(1).split(',')
-                day_names = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
-                days = []
-                for day_num in days_numbers:
-                    try:
-                        idx = int(day_num.strip())
-                        if 0 <= idx <= 6:
-                            days.append(day_names[idx])
-                    except (ValueError, IndexError):
-                        pass
-                schedule_details["days"] = ','.join(days) if days else "未知"
+                days_str = day_match.group(1)
+                # 處理兩種格式：數字格式 (1,4) 和字母格式 (mon,thu)
+                if days_str.replace(',', '').replace(' ', '').isdigit():
+                    # 數字格式
+                    days_numbers = days_str.split(',')
+                    day_names = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
+                    days = []
+                    for day_num in days_numbers:
+                        try:
+                            idx = int(day_num.strip())
+                            if 0 <= idx <= 6:
+                                days.append(day_names[idx])
+                        except (ValueError, IndexError):
+                            pass
+                    schedule_details["days"] = ','.join(days) if days else "未知"
+                else:
+                    # 字母格式，直接使用
+                    schedule_details["days"] = days_str
             
             # 解析小時
             hour_match = re.search(r"hour='([^']+)'", trigger_str)
@@ -317,6 +324,83 @@ def update_schedule(days=None, hour=None, minute=None):
         
     except Exception as e:
         return {"success": False, "message": f"更新排程失敗: {str(e)}", "error": str(e)}
+
+def get_schedule_summary():
+    """
+    取得排程的簡要摘要，用於顯示給使用者
+    
+    Returns:
+        str: 格式化的排程摘要字串
+    """
+    info = get_schedule_info()
+    
+    if not info["is_configured"]:
+        return "❌ 排程未設定"
+    
+    details = info["schedule_details"]
+    if not details:
+        return "❌ 無法取得排程詳情"
+    
+    # 格式化星期顯示
+    days = details.get("days", "未知")
+    day_mapping = {
+        "mon": "週一", "tue": "週二", "wed": "週三", "thu": "週四",
+        "fri": "週五", "sat": "周六", "sun": "週日"
+    }
+    
+    if "," in days:
+        day_list = [day_mapping.get(d.strip(), d.strip()) for d in days.split(",")]
+        days_chinese = "、".join(day_list)
+    else:
+        days_chinese = day_mapping.get(days, days)
+    
+    time_str = details.get("time", "未知")
+    timezone_str = details.get("timezone", "未知")
+    next_run = info.get("next_run_time", "未知")
+    
+    # 計算距離下次執行的時間
+    from datetime import datetime
+    import pytz
+    
+    try:
+        taipei_tz = pytz.timezone('Asia/Taipei')
+        now = datetime.now(taipei_tz)
+        
+        # 解析下次執行時間
+        if job and job.next_run_time:
+            # job.next_run_time 已經是有時區的 datetime 物件
+            time_diff = job.next_run_time - now
+            total_seconds = time_diff.total_seconds()
+            
+            if total_seconds > 0:
+                hours = int(total_seconds // 3600)
+                minutes = int((total_seconds % 3600) // 60)
+                
+                if hours > 24:
+                    days = hours // 24
+                    hours = hours % 24
+                    time_until = f"{days} 天 {hours} 小時 {minutes} 分鐘"
+                elif hours > 0:
+                    time_until = f"{hours} 小時 {minutes} 分鐘"
+                else:
+                    time_until = f"{minutes} 分鐘"
+            else:
+                time_until = "即將執行"
+        else:
+            time_until = "無法計算"
+    except Exception as e:
+        time_until = f"計算錯誤: {str(e)}"
+    
+    summary = f"""📅 垃圾收集提醒排程
+
+🕐 執行時間: {time_str} ({timezone_str})
+📆 執行星期: {days_chinese}
+⏰ 下次執行: {next_run}
+⏳ 距離下次: {time_until}
+
+✅ 排程狀態: 已啟動"""
+    
+    return summary
 
 def send_trash_reminder():
     today = date.today()
@@ -591,6 +675,16 @@ def handle_message(event):
             req = ReplyMessageRequest(
                 reply_token=event.reply_token,
                 messages=[TextMessage(text="已執行推播測試，請查看 log")]
+            )
+            messaging_api.reply_message(req)
+        
+        # 顯示排程摘要
+        if event.message.text.strip() == "@schedule":
+            summary = get_schedule_summary()
+            from linebot.v3.messaging.models import ReplyMessageRequest
+            req = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=summary)]
             )
             messaging_api.reply_message(req)
 
