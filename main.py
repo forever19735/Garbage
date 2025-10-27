@@ -238,6 +238,28 @@ def get_current_group(group_id=None):
     week_key = str(current_week)
     return group_data.get(week_key, [])
 
+# ===== 輔助函數 =====
+def get_group_id_from_event(event):
+    """
+    從 LINE event 物件中提取群組 ID
+    
+    Args:
+        event: LINE message event 物件
+        
+    Returns:
+        str: 群組 ID，如果不是群組訊息則回傳 None
+    """
+    try:
+        # 嘗試取得群組 ID
+        if hasattr(event.source, 'group_id'):
+            return event.source.group_id
+        else:
+            # 如果沒有 group_id 屬性，可能是私訊，回傳 None
+            return None
+    except Exception as e:
+        print(f"取得群組 ID 失敗: {e}")
+        return None
+
 # ===== 成員輪值管理函數 =====
 def get_member_schedule(group_id=None):
     """
