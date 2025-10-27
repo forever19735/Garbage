@@ -6,6 +6,7 @@ from linebot.v3.webhook import WebhookHandler, MessageEvent
 from linebot.v3.messaging.models import PushMessageRequest, TextMessage
 from linebot.v3.messaging.models import PushMessageRequest, TextMessage
 import os
+import json
 
 # 載入 .env 檔案中的環境變數（僅在本地開發時使用）
 try:
@@ -19,16 +20,66 @@ except ImportError:
 
 app = Flask(__name__)
 
+# 持久化檔案路徑
+GROUP_IDS_FILE = "group_ids.json"
+GROUPS_FILE = "groups.json"
+
+# ===== 持久化功能 =====
+def load_group_ids():
+    """從檔案載入群組 ID 列表"""
+    try:
+        if os.path.exists(GROUP_IDS_FILE):
+            with open(GROUP_IDS_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                print(f"DEBUG: 已載入 {len(data)} 個群組 ID")
+                return data
+    except Exception as e:
+        print(f"DEBUG: 載入群組 ID 檔案時發生錯誤: {e}")
+    return []
+
+def save_group_ids():
+    """將群組 ID 列表儲存到檔案"""
+    try:
+        with open(GROUP_IDS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(group_ids, f, ensure_ascii=False, indent=2)
+        print(f"DEBUG: 已儲存 {len(group_ids)} 個群組 ID 到檔案")
+    except Exception as e:
+        print(f"DEBUG: 儲存群組 ID 檔案時發生錯誤: {e}")
+
+def load_groups():
+    """從檔案載入成員群組資料"""
+    try:
+        if os.path.exists(GROUPS_FILE):
+            with open(GROUPS_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                print(f"DEBUG: 已載入 {len(data)} 週的成員資料")
+                return data
+    except Exception as e:
+        print(f"DEBUG: 載入成員群組檔案時發生錯誤: {e}")
+    return {}
+
+def save_groups():
+    """將成員群組資料儲存到檔案"""
+    try:
+        with open(GROUPS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(groups, f, ensure_ascii=False, indent=2)
+        print(f"DEBUG: 已儲存 {len(groups)} 週的成員資料到檔案")
+    except Exception as e:
+        print(f"DEBUG: 儲存成員群組檔案時發生錯誤: {e}")
+
 # ===== LINE Bot 設定 =====
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
 
-# 動態收集的群組 ID 列表
-group_ids = []
+# 載入持久化的群組 ID 列表
+group_ids = load_group_ids()
+groups = load_groups()  # 儲存每週的成員名單
 
 # 從環境變數載入已知的群組 ID
 if os.getenv("LINE_GROUP_ID"):
-    group_ids = ["C2260711e7290fc2307aebdfb60d94fd4"]
+    # 正確解析環境變數中的群組 ID（支援多個群組，以逗號分隔）
+    env_group_ids = [gid.strip() for gid in os.getenv("LINE_GROUP_ID").split(",") if gid.strip()]
+    group_ids.extend(env_group_ids)
 
 
 print("ACCESS_TOKEN:", LINE_CHANNEL_ACCESS_TOKEN)
@@ -61,17 +112,26 @@ messaging_api = MessagingApi(api_client)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
 # ===== 成員輪值設定 =====
-groups = [
-    ["hsinwei💐", "林志鴻"],  # 第一週
-    ["徐意淳", "D"],  # 第二週
-]
-
+# groups 變數已從持久化檔案載入
 
 # ===== 判斷當週誰要收垃圾 =====
 def get_current_group():
+    """
+    取得當前週的成員群組
+    
+    Returns:
+        list: 當前週的成員列表
+    """
+    if not isinstance(groups, dict) or len(groups) == 0:
+        return []
+    
     today = date.today()
     week_num = today.isocalendar()[1]  # 第幾週
-    return groups[(week_num - 1) % len(groups)]
+    total_weeks = len(groups)
+    current_week = (week_num - 1) % total_weeks + 1
+    
+    week_key = str(current_week)
+    return groups.get(week_key, [])
 
 # ===== 成員輪值管理函數 =====
 def get_member_schedule():
@@ -81,23 +141,33 @@ def get_member_schedule():
     Returns:
         dict: 包含成員輪值資訊的字典
     """
+    # 確保 groups 是字典格式
+    if not isinstance(groups, dict):
+        return {
+            "total_weeks": 0,
+            "current_week": 1,
+            "weeks": []
+        }
+    
+    total_weeks = len(groups)
+    current_week = (date.today().isocalendar()[1] - 1) % max(1, total_weeks) + 1
+    
     schedule_info = {
-        "total_weeks": len(groups),
-        "current_week": (date.today().isocalendar()[1] - 1) % len(groups) + 1,
+        "total_weeks": total_weeks,
+        "current_week": current_week,
         "weeks": []
     }
     
-    for i, week_members in enumerate(groups, 1):
+    for week_key in sorted(groups.keys(), key=lambda x: int(x)):
+        week_num = int(week_key)
+        week_members = groups[week_key]
         week_info = {
-            "week": i,
+            "week": week_num,
             "members": week_members.copy(),
             "member_count": len(week_members),
-            "is_current": i == schedule_info["current_week"]
+            "is_current": week_num == current_week
         }
         schedule_info["weeks"].append(week_info)
-    
-    current_group = get_current_group()
-    schedule_info["current_members"] = current_group.copy()
     
     return schedule_info
 
@@ -120,12 +190,13 @@ def update_member_schedule(week_num, members):
     if not isinstance(members, list) or len(members) == 0:
         return {"success": False, "message": "成員列表不能為空"}
     
-    # 確保 groups 有足夠的週數
-    while len(groups) < week_num:
-        groups.append([])
+    # 確保 groups 是字典格式
+    if not isinstance(groups, dict):
+        groups = {}
     
     # 更新指定週的成員
-    groups[week_num - 1] = members.copy()
+    groups[str(week_num)] = members.copy()
+    save_groups()  # 立即儲存到檔案
     
     return {
         "success": True,
@@ -154,23 +225,29 @@ def add_member_to_week(week_num, member_name):
     if not member_name or not isinstance(member_name, str):
         return {"success": False, "message": "成員名稱不能為空"}
     
-    # 確保 groups 有足夠的週數
-    while len(groups) < week_num:
-        groups.append([])
+    # 確保 groups 是字典格式
+    if not isinstance(groups, dict):
+        groups = {}
+    
+    # 初始化週數鍵值
+    week_key = str(week_num)
+    if week_key not in groups:
+        groups[week_key] = []
     
     # 檢查成員是否已存在
-    if member_name in groups[week_num - 1]:
+    if member_name in groups[week_key]:
         return {"success": False, "message": f"成員 {member_name} 已在第 {week_num} 週"}
     
     # 添加成員
-    groups[week_num - 1].append(member_name)
+    groups[week_key].append(member_name)
+    save_groups()  # 立即儲存到檔案
     
     return {
         "success": True,
-        "message": f"成員 {member_name} 已添加到第 {week_num} 週",
+        "message": f"成功添加 {member_name} 到第 {week_num} 週",
         "week": week_num,
-        "members": groups[week_num - 1].copy(),
-        "total_members": len(groups[week_num - 1])
+        "member": member_name,
+        "current_members": groups[week_key].copy()
     }
 
 def remove_member_from_week(week_num, member_name):
@@ -186,25 +263,35 @@ def remove_member_from_week(week_num, member_name):
     """
     global groups
     
-    if not isinstance(week_num, int) or week_num < 1 or week_num > len(groups):
-        return {"success": False, "message": f"週數必須在 1-{len(groups)} 之間"}
+    # 確保 groups 是字典格式
+    if not isinstance(groups, dict):
+        groups = {}
+    
+    week_key = str(week_num)
+    
+    if not isinstance(week_num, int) or week_num < 1:
+        return {"success": False, "message": "週數必須是大於 0 的整數"}
+    
+    if week_key not in groups:
+        return {"success": False, "message": f"第 {week_num} 週沒有成員安排"}
     
     if not member_name or not isinstance(member_name, str):
         return {"success": False, "message": "成員名稱不能為空"}
     
     # 檢查成員是否存在
-    if member_name not in groups[week_num - 1]:
+    if member_name not in groups[week_key]:
         return {"success": False, "message": f"成員 {member_name} 不在第 {week_num} 週"}
     
     # 移除成員
-    groups[week_num - 1].remove(member_name)
+    groups[week_key].remove(member_name)
+    save_groups()  # 立即儲存到檔案
     
     return {
         "success": True,
         "message": f"成員 {member_name} 已從第 {week_num} 週移除",
         "week": week_num,
-        "members": groups[week_num - 1].copy(),
-        "total_members": len(groups[week_num - 1])
+        "remaining_members": groups[week_key].copy(),
+        "total_members": len(groups[week_key])
     }
 
 def get_member_schedule_summary():
@@ -216,21 +303,32 @@ def get_member_schedule_summary():
     """
     schedule = get_member_schedule()
     
+    if schedule["total_weeks"] == 0:
+        return "👥 尚未設定成員輪值表\n\n💡 使用「成員設定 1 小明 小華」來設定第1週的成員"
+    
     summary = f"👥 垃圾收集成員輪值表\n\n"
     summary += f"📅 總共 {schedule['total_weeks']} 週輪值\n"
     summary += f"📍 目前第 {schedule['current_week']} 週\n\n"
+    
+    current_week_members = []
     
     for week_info in schedule["weeks"]:
         week_num = week_info["week"]
         members = week_info["members"]
         is_current = week_info["is_current"]
         
+        if is_current:
+            current_week_members = members
+        
         status = "👈 本週" if is_current else "　　　"
         member_list = "、".join(members) if members else "無成員"
         
         summary += f"第 {week_num} 週: {member_list} {status}\n"
     
-    summary += f"\n🗑️ 本週負責: {', '.join(schedule['current_members'])}"
+    if current_week_members:
+        summary += f"\n🗑️ 本週負責: {', '.join(current_week_members)}"
+    else:
+        summary += f"\n🗑️ 本週負責: 無成員"
     
     return summary
 
@@ -434,6 +532,7 @@ def add_line_group_id(group_id):
     
     # 添加到列表
     group_ids.append(group_id)
+    save_group_ids()  # 立即儲存到檔案
     return {
         "success": True, 
         "message": f"成功添加群組 ID: {group_id}",
@@ -454,6 +553,7 @@ def remove_line_group_id(group_id):
     
     if group_id in group_ids:
         group_ids.remove(group_id)
+        save_group_ids()  # 立即儲存到檔案
         return {
             "success": True,
             "message": f"成功移除群組 ID: {group_id}",
