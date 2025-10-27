@@ -1630,17 +1630,6 @@ def handle_message(event):
                 messages=[TextMessage(text=help_text)]
             )
             messaging_api.reply_message(req)
-        
-        # 測試推播功能
-        if event.message.text.strip() == "@test":
-            print("DEBUG: 收到 @test 指令，立即執行推播測試")
-            send_trash_reminder()
-            from linebot.v3.messaging.models import ReplyMessageRequest
-            req = ReplyMessageRequest(
-                reply_token=event.reply_token,
-                messages=[TextMessage(text="已執行推播測試，請查看 log")]
-            )
-            messaging_api.reply_message(req)
 
 if __name__ == "__main__":
     import os
