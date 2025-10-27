@@ -234,6 +234,165 @@ def get_member_schedule_summary():
     
     return summary
 
+# ===== 幫助功能 =====
+def get_help_message(category=None):
+    """
+    取得幫助訊息
+    
+    Args:
+        category (str): 指定類別 ('schedule', 'members', 'groups', 'test')
+        
+    Returns:
+        str: 格式化的幫助訊息
+    """
+    
+    if category == "schedule":
+        return """⏰ 排程管理指令
+
+🕐 查看排程：
+@schedule - 顯示目前推播排程
+
+⚙️ 設定排程：
+@settime HH:MM - 設定推播時間
+範例：@settime 18:30
+
+@setday 星期 - 設定推播星期
+範例：@setday mon,thu
+
+@setcron 星期 時 分 - 同時設定星期和時間
+範例：@setcron tue,fri 20 15
+
+📋 支援的星期格式：
+mon, tue, wed, thu, fri, sat, sun"""
+
+    elif category == "members":
+        return """👥 成員管理指令
+
+📋 查看成員：
+@members - 顯示完整輪值表
+
+⚙️ 管理成員：
+@setweek 週數 成員1,成員2 - 設定整週成員
+範例：@setweek 1 Alice,Bob,Charlie
+
+@addmember 週數 成員名 - 添加成員到指定週
+範例：@addmember 2 David
+
+@removemember 週數 成員名 - 從指定週移除成員
+範例：@removemember 1 Alice
+
+💡 提示：
+- 週數從 1 開始
+- 成員名稱支援中文和表情符號
+- 用逗號分隔多個成員，不要加空格"""
+
+    elif category == "groups":
+        return """📱 群組管理指令
+
+🔍 查看群組：
+@groups - 顯示已設定的群組列表
+@info - 顯示詳細群組資訊
+
+⚙️ 管理群組：
+@debug - 自動添加當前群組 ID
+💡 在想要接收提醒的群組中輸入此指令
+
+📊 群組資訊說明：
+- 每個群組只需執行一次 @debug
+- 支援多個群組同時接收提醒
+- 群組 ID 以 'C' 開頭"""
+
+    elif category == "test":
+        return """🧪 測試和調試指令
+
+🔧 測試功能：
+@test - 立即執行推播測試
+💡 用於測試推播是否正常運作
+
+📊 查看資訊：
+@schedule - 排程資訊
+@members - 成員輪值表
+@groups - 群組列表
+@info - 詳細群組資訊
+
+🆘 獲取幫助：
+@help - 顯示所有指令
+@help 類別 - 顯示特定類別指令
+類別：schedule, members, groups, test"""
+
+    else:  # 顯示所有指令概覽
+        return """🤖 垃圾收集提醒 Bot 指令大全
+
+📋 快速查看：
+@help schedule - 排程管理指令
+@help members - 成員管理指令  
+@help groups - 群組管理指令
+@help test - 測試和調試指令
+
+🔥 常用指令：
+@schedule - 查看推播排程
+@members - 查看成員輪值表
+@groups - 查看群組設定
+@test - 測試推播功能
+@debug - 添加群組 ID
+
+⚙️ 快速設定：
+@settime 18:30 - 設定推播時間
+@setday mon,thu - 設定推播星期
+@setweek 1 Alice,Bob - 設定第1週成員
+
+💡 提示：
+- 所有時間都是台北時間
+- 群組 ID 會自動記住
+- 支援多群組推播
+- 成員輪值自動循環
+
+❓ 需要詳細說明請輸入：
+@help 類別名稱"""
+
+def get_command_examples():
+    """
+    取得指令範例
+    
+    Returns:
+        str: 格式化的指令範例
+    """
+    return """📚 指令範例集
+
+🏃‍♂️ 快速開始：
+1. @debug - 在群組中添加群組 ID
+2. @settime 18:00 - 設定晚上6點推播
+3. @setweek 1 Alice,Bob - 設定第1週成員
+4. @test - 測試推播功能
+
+⏰ 排程設定範例：
+@settime 07:30 - 早上7:30提醒
+@settime 18:00 - 晚上6:00提醒
+@setday mon,wed,fri - 週一三五提醒
+@setcron sat,sun 09 00 - 週末早上9:00
+
+👥 成員管理範例：
+@setweek 1 小明,小華 - 第1週：小明、小華
+@setweek 2 小美,小強 - 第2週：小美、小強
+@addmember 1 小李 - 第1週加入小李
+@removemember 2 小強 - 第2週移除小強
+
+📱 多群組設定：
+在群組A輸入：@debug
+在群組B輸入：@debug
+兩個群組都會收到提醒
+
+🧪 測試流程：
+@members - 查看輪值安排
+@schedule - 確認推播時間  
+@test - 立即測試推播
+@groups - 確認群組設定
+
+💡 實用技巧：
+- 用表情符號標記成員：@setweek 1 Alice🌟,Bob🔥
+- 設定備用成員：@setweek 3 主要成員,備用成員
+- 查看下次提醒：@schedule"""
+
 # ===== 取得目前設定的群組 ID =====
 def get_line_group_ids():
     """
@@ -1005,6 +1164,30 @@ def handle_message(event):
                     messages=[TextMessage(text="格式錯誤，請輸入 @removemember 週數 成員名\n例如: @removemember 1 Alice")]
                 )
                 messaging_api.reply_message(req)
+        
+        # 幫助指令
+        if event.message.text.strip().startswith("@help"):
+            parts = event.message.text.strip().split(maxsplit=1)
+            if len(parts) == 1:
+                # @help - 顯示總覽
+                help_text = get_help_message()
+            elif parts[1] == "examples":
+                # @help examples - 顯示範例
+                help_text = get_command_examples()
+            else:
+                # @help 類別 - 顯示特定類別
+                category = parts[1].lower()
+                if category in ["schedule", "members", "groups", "test"]:
+                    help_text = get_help_message(category)
+                else:
+                    help_text = "❌ 未知類別，請輸入：\n@help schedule\n@help members\n@help groups\n@help test\n@help examples"
+            
+            from linebot.v3.messaging.models import ReplyMessageRequest
+            req = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=help_text)]
+            )
+            messaging_api.reply_message(req)
         
         # 測試推播功能
         if event.message.text.strip() == "@test":
