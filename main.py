@@ -308,9 +308,17 @@ def update_schedule(days=None, hour=None, minute=None):
         if job:
             job.remove()
         
-        # 建立新排程
+        # 建立新排程，明確指定時區
         from apscheduler.triggers.cron import CronTrigger
-        job = scheduler.add_job(send_trash_reminder, CronTrigger(day_of_week=days, hour=hour, minute=minute))
+        job = scheduler.add_job(
+            send_trash_reminder, 
+            CronTrigger(
+                day_of_week=days, 
+                hour=hour, 
+                minute=minute,
+                timezone=pytz.timezone('Asia/Taipei')  # 明確指定時區
+            )
+        )
         
         return {
             "success": True,
@@ -450,11 +458,19 @@ def send_trash_reminder():
             print("DEBUG: LINE 群組 ID 應該以 'C' 開頭，例如: C1234567890abcdef...")
     print(message)
 
-# ===== 啟動排程（每週一、四上午 9:00）=====
+# ===== 啟動排程（每週一、四下午 5:10）=====
 from apscheduler.triggers.cron import CronTrigger
 import pytz
 scheduler = BackgroundScheduler(timezone=pytz.timezone('Asia/Taipei'))
-job = scheduler.add_job(send_trash_reminder, "cron", day_of_week="mon,thu", hour=17, minute=10)
+job = scheduler.add_job(
+    send_trash_reminder, 
+    CronTrigger(
+        day_of_week="mon,thu", 
+        hour=17, 
+        minute=10,
+        timezone=pytz.timezone('Asia/Taipei')  # 明確指定時區
+    )
+)
 scheduler.start()
 
 print(f"DEBUG: 排程已啟動，下次執行時間: {job.next_run_time}")
@@ -508,12 +524,42 @@ def handle_message(event):
             days = m.group(1)
             hour = int(m.group(2))
             minute = int(m.group(3))
+            
+            # 驗證時間範圍
+            if not (0 <= hour <= 23):
+                from linebot.v3.messaging.models import ReplyMessageRequest
+                req = ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text="小時必須在 0-23 之間")]
+                )
+                messaging_api.reply_message(req)
+                return
+                
+            if not (0 <= minute <= 59):
+                from linebot.v3.messaging.models import ReplyMessageRequest
+                req = ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text="分鐘必須在 0-59 之間")]
+                )
+                messaging_api.reply_message(req)
+                return
+            
+            # 移除舊排程並建立新排程，明確指定時區
             job.remove()
-            job = scheduler.add_job(send_trash_reminder, CronTrigger(day_of_week=days, hour=hour, minute=minute))
+            job = scheduler.add_job(
+                send_trash_reminder, 
+                CronTrigger(
+                    day_of_week=days, 
+                    hour=hour, 
+                    minute=minute,
+                    timezone=pytz.timezone('Asia/Taipei')  # 明確指定時區
+                )
+            )
+            
             from linebot.v3.messaging.models import ReplyMessageRequest
             req = ReplyMessageRequest(
                 reply_token=event.reply_token,
-                messages=[TextMessage(text=f"推播時間已更新為 {days} {hour:02d}:{minute:02d}")]
+                messages=[TextMessage(text=f"✅ 推播時間已更新為 {days} {hour:02d}:{minute:02d} (台北時間)\n⏰ 下次執行: {job.next_run_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")]
             )
             messaging_api.reply_message(req)
         else:
@@ -531,14 +577,28 @@ def handle_message(event):
         if m:
             days = m.group(1)
             # 取得目前排程時間
-            hour = job.trigger.fields[1].expressions[0].value if hasattr(job, 'trigger') else 17
-            minute = job.trigger.fields[0].expressions[0].value if hasattr(job, 'trigger') else 10
+            current_info = get_schedule_info()
+            if current_info["is_configured"] and current_info["schedule_details"]:
+                hour = current_info["schedule_details"]["hour"]
+                minute = current_info["schedule_details"]["minute"]
+            else:
+                hour = 17  # 預設值
+                minute = 10  # 預設值
+            
             job.remove()
-            job = scheduler.add_job(send_trash_reminder, CronTrigger(day_of_week=days, hour=hour, minute=minute))
+            job = scheduler.add_job(
+                send_trash_reminder, 
+                CronTrigger(
+                    day_of_week=days, 
+                    hour=hour, 
+                    minute=minute,
+                    timezone=pytz.timezone('Asia/Taipei')  # 明確指定時區
+                )
+            )
             from linebot.v3.messaging.models import ReplyMessageRequest
             req = ReplyMessageRequest(
                 reply_token=event.reply_token,
-                messages=[TextMessage(text=f"推播星期已更新為 {days}")]
+                messages=[TextMessage(text=f"✅ 推播星期已更新為 {days}\n⏰ 下次執行: {job.next_run_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")]
             )
             messaging_api.reply_message(req)
         else:
@@ -560,12 +620,47 @@ def handle_message(event):
             if m:
                 hour = int(m.group(1))
                 minute = int(m.group(2))
+                
+                # 驗證時間範圍
+                if not (0 <= hour <= 23):
+                    from linebot.v3.messaging.models import ReplyMessageRequest
+                    req = ReplyMessageRequest(
+                        reply_token=event.reply_token,
+                        messages=[TextMessage(text="小時必須在 0-23 之間")]
+                    )
+                    messaging_api.reply_message(req)
+                    return
+                    
+                if not (0 <= minute <= 59):
+                    from linebot.v3.messaging.models import ReplyMessageRequest
+                    req = ReplyMessageRequest(
+                        reply_token=event.reply_token,
+                        messages=[TextMessage(text="分鐘必須在 0-59 之間")]
+                    )
+                    messaging_api.reply_message(req)
+                    return
+                
+                # 取得目前的星期設定
+                current_info = get_schedule_info()
+                if current_info["is_configured"] and current_info["schedule_details"]:
+                    days = current_info["schedule_details"]["days"]
+                else:
+                    days = "mon,thu"  # 預設值
+                
                 job.remove()
-                job = scheduler.add_job(send_trash_reminder, CronTrigger(day_of_week="mon,thu", hour=hour, minute=minute))
+                job = scheduler.add_job(
+                    send_trash_reminder, 
+                    CronTrigger(
+                        day_of_week=days, 
+                        hour=hour, 
+                        minute=minute,
+                        timezone=pytz.timezone('Asia/Taipei')  # 明確指定時區
+                    )
+                )
                 from linebot.v3.messaging.models import ReplyMessageRequest
                 req = ReplyMessageRequest(
                     reply_token=event.reply_token,
-                    messages=[TextMessage(text=f"推播時間已更新為 {hour:02d}:{minute:02d}")]
+                    messages=[TextMessage(text=f"✅ 推播時間已更新為 {hour:02d}:{minute:02d} (台北時間)\n⏰ 下次執行: {job.next_run_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")]
                 )
                 messaging_api.reply_message(req)
             else:
