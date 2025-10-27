@@ -20,8 +20,9 @@ app = Flask(__name__)
 
 # 持久化檔案路徑
 GROUP_IDS_FILE = "group_ids.json"
-GROUPS_FILE = "groups.json"
+GROUPS_FILE = "groups.json"  # 將改為分群組儲存: {group_id: {week: [members]}}
 BASE_DATE_FILE = "base_date.json"
+GROUP_SETTINGS_FILE = "group_settings.json"  # 新增：每個群組的個別設定
 
 # ===== 持久化功能 =====
 def load_group_ids():
@@ -44,18 +45,25 @@ def save_group_ids():
         pass
 
 def load_groups():
-    """從檔案載入成員群組資料"""
+    """從檔案載入成員群組資料 - 支援分群組儲存"""
     try:
         if os.path.exists(GROUPS_FILE):
             with open(GROUPS_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                return data
+                # 向後相容：如果是舊格式（直接是 week: [members]），轉換為新格式
+                if data and isinstance(data, dict):
+                    # 檢查是否為舊格式（key 是數字字串，代表週數）
+                    if any(key.isdigit() for key in data.keys()):
+                        # 舊格式，需要轉換為新格式
+                        return {"legacy": data}  # 用 "legacy" 作為預設群組ID
+                    # 新格式，直接返回
+                    return data
     except Exception as e:
         pass
     return {}
 
 def save_groups():
-    """將成員群組資料儲存到檔案"""
+    """將成員群組資料儲存到檔案 - 支援分群組儲存"""
     try:
         with open(GROUPS_FILE, 'w', encoding='utf-8') as f:
             json.dump(groups, f, ensure_ascii=False, indent=2)
@@ -145,9 +153,12 @@ handler = WebhookHandler(LINE_CHANNEL_SECRET)
 # groups 變數已從持久化檔案載入
 
 # ===== 判斷當週誰要收垃圾 =====
-def get_current_group():
+def get_current_group(group_id=None):
     """
     取得當前週的成員群組（基於自然週計算：星期一到星期日）
+    
+    Args:
+        group_id (str): 指定群組ID，如果為None則使用legacy模式
     
     Returns:
         list: 當前週的成員列表
@@ -155,6 +166,24 @@ def get_current_group():
     global base_date
     
     if not isinstance(groups, dict) or len(groups) == 0:
+        return []
+    
+    # 決定使用哪個群組的資料
+    if group_id is None:
+        # 向後相容模式：使用legacy群組或第一個可用群組
+        if "legacy" in groups:
+            group_data = groups["legacy"]
+        elif groups:
+            group_data = next(iter(groups.values()))
+        else:
+            return []
+    else:
+        # 指定群組模式
+        if group_id not in groups:
+            return []
+        group_data = groups[group_id]
+    
+    if not isinstance(group_data, dict) or len(group_data) == 0:
         return []
     
     today = date.today()
@@ -174,17 +203,22 @@ def get_current_group():
     weeks_diff = (today_monday - base_monday).days // 7
     
     # 計算當前是第幾週（從第1週開始）
-    total_weeks = len(groups)
+    total_weeks = len(group_data)
+    if total_weeks == 0:
+        return []
+    
     current_week = (weeks_diff % total_weeks) + 1
     
-    
     week_key = str(current_week)
-    return groups.get(week_key, [])
+    return group_data.get(week_key, [])
 
 # ===== 成員輪值管理函數 =====
-def get_member_schedule():
+def get_member_schedule(group_id=None):
     """
     取得目前的成員輪值安排（基於自然週計算）
+    
+    Args:
+        group_id (str): 指定群組ID，如果為None則使用legacy模式
     
     Returns:
         dict: 包含成員輪值資訊的字典
@@ -197,11 +231,54 @@ def get_member_schedule():
             "total_weeks": 0,
             "current_week": 1,
             "base_date": None,
-            "calculation_method": "natural_week",
-            "weeks": []
+            "group_id": group_id,
+            "schedule": {},
+            "current_members": []
         }
     
-    total_weeks = len(groups)
+    # 決定使用哪個群組的資料
+    if group_id is None:
+        # 向後相容模式：使用legacy群組或第一個可用群組
+        if "legacy" in groups:
+            group_data = groups["legacy"]
+            effective_group_id = "legacy"
+        elif groups:
+            effective_group_id = next(iter(groups.keys()))
+            group_data = groups[effective_group_id]
+        else:
+            return {
+                "total_weeks": 0,
+                "current_week": 1,
+                "base_date": None,
+                "group_id": group_id,
+                "schedule": {},
+                "current_members": []
+            }
+    else:
+        # 指定群組模式
+        if group_id not in groups:
+            return {
+                "total_weeks": 0,
+                "current_week": 1,
+                "base_date": None,
+                "group_id": group_id,
+                "schedule": {},
+                "current_members": []
+            }
+        group_data = groups[group_id]
+        effective_group_id = group_id
+    
+    if not isinstance(group_data, dict):
+        return {
+            "total_weeks": 0,
+            "current_week": 1,
+            "base_date": None,
+            "group_id": effective_group_id,
+            "schedule": {},
+            "current_members": []
+        }
+    
+    total_weeks = len(group_data)
     today = date.today()
     
     # 如果沒有基準日期且有成員設定，使用當天作為基準
@@ -210,7 +287,7 @@ def get_member_schedule():
         save_base_date(base_date)
     
     # 計算當前週（使用自然週）
-    if base_date is not None:
+    if base_date is not None and total_weeks > 0:
         # 計算基準日期所在自然週的星期一
         base_monday = base_date - timedelta(days=base_date.weekday())
         
@@ -219,27 +296,35 @@ def get_member_schedule():
         
         # 計算相差多少個自然週
         weeks_diff = (today_monday - base_monday).days // 7
-        current_week = (weeks_diff % max(1, total_weeks)) + 1
+        current_week = (weeks_diff % total_weeks) + 1
         
         # 計算距離基準週開始的總天數
         days_since_start = (today - base_monday).days
     else:
         current_week = 1
         days_since_start = 0
+        weeks_diff = 0
+    
+    # 取得當前週的成員
+    current_week_key = str(current_week)
+    current_members = group_data.get(current_week_key, [])
     
     schedule_info = {
         "total_weeks": total_weeks,
         "current_week": current_week,
         "base_date": base_date.isoformat() if base_date else None,
+        "group_id": effective_group_id,
         "calculation_method": "natural_week",
         "days_since_start": days_since_start,
-        "weeks_diff": weeks_diff if base_date else 0,
+        "weeks_diff": weeks_diff,
+        "current_members": current_members,
         "weeks": []
     }
     
-    for week_key in sorted(groups.keys(), key=lambda x: int(x)):
+    # 建立週次資訊
+    for week_key in sorted(group_data.keys(), key=lambda x: int(x)):
         week_num = int(week_key)
-        week_members = groups[week_key]
+        week_members = group_data[week_key]
         week_info = {
             "week": week_num,
             "members": week_members.copy(),
@@ -250,13 +335,14 @@ def get_member_schedule():
     
     return schedule_info
 
-def update_member_schedule(week_num, members):
+def update_member_schedule(week_num, members, group_id=None):
     """
     更新指定週的成員安排
     
     Args:
         week_num (int): 週數 (1-based)
         members (list): 成員列表
+        group_id (str): 群組ID，如果為None則使用legacy模式
         
     Returns:
         dict: 操作結果
@@ -268,6 +354,39 @@ def update_member_schedule(week_num, members):
     
     if not isinstance(members, list) or len(members) == 0:
         return {"success": False, "message": "成員列表不能為空"}
+    
+    # 確保 groups 是字典格式
+    if not isinstance(groups, dict):
+        groups = {}
+    
+    # 決定使用哪個群組
+    if group_id is None:
+        # 向後相容模式：使用legacy群組
+        target_group_id = "legacy"
+    else:
+        target_group_id = group_id
+    
+    # 確保群組存在
+    if target_group_id not in groups:
+        groups[target_group_id] = {}
+    
+    # 更新成員
+    week_key = str(week_num)
+    groups[target_group_id][week_key] = members.copy()
+    
+    # 如果這是第一次設定成員且沒有基準日期，設定基準日期
+    if base_date is None:
+        base_date = date.today()
+        save_base_date(base_date)
+    
+    # 儲存更新
+    save_groups()
+    
+    group_display = f" (群組: {target_group_id})" if target_group_id != "legacy" else ""
+    return {
+        "success": True,
+        "message": f"已設定第 {week_num} 週成員：{', '.join(members)}{group_display}"
+    }
     
     # 確保 groups 是字典格式
     if not isinstance(groups, dict):
@@ -383,19 +502,24 @@ def remove_member_from_week(week_num, member_name):
         "total_members": len(groups[week_key])
     }
 
-def get_member_schedule_summary():
+def get_member_schedule_summary(group_id=None):
     """
     取得成員輪值的簡要摘要，用於顯示給使用者
+    
+    Args:
+        group_id (str): 指定群組ID，如果為None則使用legacy模式
     
     Returns:
         str: 格式化的成員輪值摘要字串
     """
-    schedule = get_member_schedule()
+    schedule = get_member_schedule(group_id)
     
     if schedule["total_weeks"] == 0:
-        return "👥 尚未設定成員輪值表\n\n💡 使用「@setweek 1 小明,小華」來設定第1週的成員"
+        group_info = f" (群組: {group_id})" if group_id and group_id != "legacy" else ""
+        return f"👥 尚未設定成員輪值表{group_info}\n\n💡 使用「@setweek 1 小明,小華」來設定第1週的成員"
     
-    summary = f"👥 垃圾收集成員輪值表\n\n"
+    group_info = f" (群組: {schedule['group_id']})" if schedule['group_id'] != "legacy" else ""
+    summary = f"👥 垃圾收集成員輪值表{group_info}\n\n"
     summary += f"📅 總共 {schedule['total_weeks']} 週輪值\n"
     summary += f"📍 目前第 {schedule['current_week']} 週\n"
     
@@ -1211,26 +1335,6 @@ def send_trash_reminder():
     weekday_names = ['週一', '週二', '週三', '週四', '週五', '週六', '週日']
     print(f"今天是 {today.strftime('%m/%d')}, {weekday_names[weekday]} (weekday={weekday})")
     
-    # 移除週一四限制，根據排程執行
-    group = get_current_group()
-    print(f"當前群組成員: {group}")
-    
-    if not group:
-        message = f"🗑️ 今天 {today.strftime('%m/%d')} ({weekday_names[weekday]}) 是收垃圾日！\n💡 請設定成員輪值表"
-        person = "未設定成員"
-    else:
-        # 根據星期決定誰收垃圾（可自訂規則）
-        # 週一=0, 週二=1, 週三=2, 週四=3, 週五=4, 週六=5, 週日=6
-        if weekday in [0, 3]:  # 週一、週四 -> 第一個人
-            person = group[0] if len(group) > 0 else "無成員"
-        elif weekday in [1, 4]:  # 週二、週五 -> 第二個人  
-            person = group[1] if len(group) > 1 else group[0] if len(group) > 0 else "無成員"
-        else:  # 其他天數可自訂規則
-            person = group[weekday % len(group)] if group else "無成員"
-        
-        message = f"🗑️ 今天 {today.strftime('%m/%d')} ({weekday_names[weekday]}) 輪到 {person} 收垃圾！"
-    
-    print(f"準備推播訊息: {message}")
     print(f"群組 IDs: {group_ids}")
 
     if not group_ids:
@@ -1238,8 +1342,8 @@ def send_trash_reminder():
         print("請將 Bot 加入群組，Bot 會自動記錄群組 ID")
         return
 
+    # 為每個群組分別處理
     for gid in group_ids:
-        # 驗證群組 ID 格式並詳細記錄
         print(f"正在處理群組 ID: {gid}")
         
         if not gid:
@@ -1257,8 +1361,29 @@ def send_trash_reminder():
         if len(gid) <= 10:
             print(f"跳過過短的群組 ID: {gid}")
             continue
+        
+        # 取得該群組的成員輪值
+        group = get_current_group(gid)
+        print(f"群組 {gid} 當前成員: {group}")
+        
+        if not group:
+            message = f"🗑️ 今天 {today.strftime('%m/%d')} ({weekday_names[weekday]}) 是收垃圾日！\n💡 請設定成員輪值表\n\n使用指令：@setweek 1 成員1,成員2"
+            person = "未設定成員"
+        else:
+            # 根據星期決定誰收垃圾（可自訂規則）
+            # 週一=0, 週二=1, 週三=2, 週四=3, 週五=4, 週六=5, 週日=6
+            if weekday in [0, 3]:  # 週一、週四 -> 第一個人
+                person = group[0] if len(group) > 0 else "無成員"
+            elif weekday in [1, 4]:  # 週二、週五 -> 第二個人  
+                person = group[1] if len(group) > 1 else group[0] if len(group) > 0 else "無成員"
+            else:  # 其他天數可自訂規則
+                person = group[weekday % len(group)] if group else "無成員"
             
-        # 群組 ID 格式正確，開始推播
+            message = f"🗑️ 今天 {today.strftime('%m/%d')} ({weekday_names[weekday]}) 輪到 {person} 收垃圾！"
+        
+        print(f"群組 {gid} 推播訊息: {message}")
+        
+        # 發送推播到該群組
         try:
             # 檢查 messaging_api 是否已初始化
             if not messaging_api:
@@ -1284,7 +1409,7 @@ def send_trash_reminder():
             import traceback
             print(f"完整錯誤: {traceback.format_exc()}")
     
-    print(message)
+    print("所有群組推播處理完成")
 
 # ===== 啟動排程（每週一、四下午 5:10）=====
 from apscheduler.triggers.cron import CronTrigger
@@ -1569,7 +1694,9 @@ def handle_message(event):
         
         # 顯示成員輪值表
         if event.message.text.strip() == "@members":
-            summary = get_member_schedule_summary()
+            # 取得當前群組ID
+            group_id = getattr(event.source, 'group_id', None)
+            summary = get_member_schedule_summary(group_id)
             from linebot.v3.messaging.models import ReplyMessageRequest
             req = ReplyMessageRequest(
                 reply_token=event.reply_token,
@@ -1647,7 +1774,10 @@ def handle_message(event):
                 members_str = m.group(2)
                 members = [member.strip() for member in members_str.split(",") if member.strip()]
                 
-                result = update_member_schedule(week_num, members)
+                # 取得當前群組ID
+                group_id = getattr(event.source, 'group_id', None)
+                
+                result = update_member_schedule(week_num, members, group_id)
                 
                 from linebot.v3.messaging.models import ReplyMessageRequest
                 req = ReplyMessageRequest(
