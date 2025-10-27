@@ -21,7 +21,8 @@
 - `@help schedule` - 排程管理指令
 - `@help members` - 成員管理指令
 - `@help groups` - 群組管理指令
-- `@help test` - 測試和調試指令
+- `@help manage` - 管理功能指令
+- `@help test` - 查看和調試指令
 
 #### `@help examples`
 顯示完整的指令範例集，包括：
@@ -54,9 +55,9 @@
 @debug - 自動添加當前群組 ID
 ```
 
-### 🧪 測試和調試 (`@help test`)
+### 🧪 查看和調試 (`@help test`)
 ```
-@test - 立即執行推播測試
+@status - 完整系統狀態摘要
 @schedule - 排程資訊
 @members - 成員輪值表
 @groups - 群組列表
@@ -73,7 +74,7 @@
 4. @settime 18:00     # 設定推播時間
 5. @help members      # 學習成員管理
 6. @setweek 1 Alice,Bob # 設定成員
-7. @test              # 測試推播
+7. @status            # 查看系統狀態
 ```
 
 ### 查詢特定功能
@@ -93,7 +94,7 @@
 ### 函數結構
 
 #### `get_help_message(category=None)`
-- **參數**: `category` - 指定類別 ('schedule', 'members', 'groups', 'test')
+- **參數**: `category` - 指定類別 ('schedule', 'members', 'groups', 'manage', 'test')
 - **返回**: 格式化的幫助訊息字串
 - **功能**: 根據類別返回對應的幫助內容
 
@@ -113,7 +114,7 @@ if event.message.text.strip().startswith("@help"):
         help_text = get_command_examples()       # 範例
     else:
         category = parts[1].lower()
-        if category in ["schedule", "members", "groups", "test"]:
+        if category in ["schedule", "members", "groups", "manage", "test"]:
             help_text = get_help_message(category)  # 特定類別
         else:
             help_text = "❌ 未知類別..."           # 錯誤訊息
@@ -129,13 +130,14 @@ if event.message.text.strip().startswith("@help"):
 @help schedule - 排程管理指令
 @help members - 成員管理指令  
 @help groups - 群組管理指令
-@help test - 測試和調試指令
+@help manage - 管理功能指令
+@help test - 查看和調試指令
 
 🔥 常用指令：
 @schedule - 查看推播排程
 @members - 查看成員輪值表
 @groups - 查看群組設定
-@test - 測試推播功能
+@status - 查看系統狀態
 @debug - 添加群組 ID
 
 ⚙️ 快速設定：
