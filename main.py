@@ -1,5 +1,5 @@
 from flask import Flask, request, abort
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
 from linebot.v3.messaging import MessagingApi, Configuration, ApiClient
 from linebot.v3.webhook import WebhookHandler, MessageEvent
@@ -23,6 +23,7 @@ app = Flask(__name__)
 # 持久化檔案路徑
 GROUP_IDS_FILE = "group_ids.json"
 GROUPS_FILE = "groups.json"
+BASE_DATE_FILE = "base_date.json"
 
 # ===== 持久化功能 =====
 def load_group_ids():
@@ -67,6 +68,44 @@ def save_groups():
     except Exception as e:
         print(f"DEBUG: 儲存成員群組檔案時發生錯誤: {e}")
 
+def load_base_date():
+    """從檔案載入基準日期"""
+    try:
+        if os.path.exists(BASE_DATE_FILE):
+            with open(BASE_DATE_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                from datetime import datetime
+                base_date = datetime.fromisoformat(data["base_date"]).date()
+                print(f"DEBUG: 已載入基準日期: {base_date}")
+                return base_date
+    except Exception as e:
+        print(f"DEBUG: 載入基準日期檔案時發生錯誤: {e}")
+    return None
+
+def save_base_date(base_date):
+    """將基準日期儲存到檔案"""
+    try:
+        data = {
+            "base_date": base_date.isoformat(),
+            "set_at": datetime.now().isoformat()
+        }
+        with open(BASE_DATE_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        print(f"DEBUG: 已儲存基準日期: {base_date}")
+    except Exception as e:
+        print(f"DEBUG: 儲存基準日期檔案時發生錯誤: {e}")
+
+def reset_base_date():
+    """重置基準日期"""
+    global base_date
+    base_date = None
+    try:
+        if os.path.exists(BASE_DATE_FILE):
+            os.remove(BASE_DATE_FILE)
+        print("DEBUG: 已重置基準日期")
+    except Exception as e:
+        print(f"DEBUG: 重置基準日期時發生錯誤: {e}")
+
 # ===== LINE Bot 設定 =====
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
@@ -74,6 +113,7 @@ LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
 # 載入持久化的群組 ID 列表
 group_ids = load_group_ids()
 groups = load_groups()  # 儲存每週的成員名單
+base_date = load_base_date()  # 儲存基準日期（第一週開始日期）
 
 # 從環境變數載入已知的群組 ID
 if os.getenv("LINE_GROUP_ID"):
@@ -117,18 +157,41 @@ handler = WebhookHandler(LINE_CHANNEL_SECRET)
 # ===== 判斷當週誰要收垃圾 =====
 def get_current_group():
     """
-    取得當前週的成員群組
+    取得當前週的成員群組（基於自然週計算：星期一到星期日）
     
     Returns:
         list: 當前週的成員列表
     """
+    global base_date
+    
     if not isinstance(groups, dict) or len(groups) == 0:
         return []
     
     today = date.today()
-    week_num = today.isocalendar()[1]  # 第幾週
+    
+    # 如果沒有基準日期，使用當天作為第一週的開始
+    if base_date is None:
+        base_date = today
+        save_base_date(base_date)
+        print(f"DEBUG: 自動設定基準日期為今天: {base_date}")
+    
+    # 計算基準日期所在自然週的星期一
+    base_monday = base_date - timedelta(days=base_date.weekday())
+    
+    # 計算今天所在自然週的星期一
+    today_monday = today - timedelta(days=today.weekday())
+    
+    # 計算相差多少個自然週
+    weeks_diff = (today_monday - base_monday).days // 7
+    
+    # 計算當前是第幾週（從第1週開始）
     total_weeks = len(groups)
-    current_week = (week_num - 1) % total_weeks + 1
+    current_week = (weeks_diff % total_weeks) + 1
+    
+    print(f"DEBUG: 基準日期: {base_date} (基準週一: {base_monday})")
+    print(f"DEBUG: 今天: {today} (今天週一: {today_monday})")
+    print(f"DEBUG: 相差自然週數: {weeks_diff}")
+    print(f"DEBUG: 總週數: {total_weeks}, 當前週: {current_week}")
     
     week_key = str(current_week)
     return groups.get(week_key, [])
@@ -136,25 +199,56 @@ def get_current_group():
 # ===== 成員輪值管理函數 =====
 def get_member_schedule():
     """
-    取得目前的成員輪值安排
+    取得目前的成員輪值安排（基於自然週計算）
     
     Returns:
         dict: 包含成員輪值資訊的字典
     """
+    global base_date
+    
     # 確保 groups 是字典格式
     if not isinstance(groups, dict):
         return {
             "total_weeks": 0,
             "current_week": 1,
+            "base_date": None,
+            "calculation_method": "natural_week",
             "weeks": []
         }
     
     total_weeks = len(groups)
-    current_week = (date.today().isocalendar()[1] - 1) % max(1, total_weeks) + 1
+    today = date.today()
+    
+    # 如果沒有基準日期且有成員設定，使用當天作為基準
+    if base_date is None and total_weeks > 0:
+        base_date = today
+        save_base_date(base_date)
+    
+    # 計算當前週（使用自然週）
+    if base_date is not None:
+        # 計算基準日期所在自然週的星期一
+        base_monday = base_date - timedelta(days=base_date.weekday())
+        
+        # 計算今天所在自然週的星期一
+        today_monday = today - timedelta(days=today.weekday())
+        
+        # 計算相差多少個自然週
+        weeks_diff = (today_monday - base_monday).days // 7
+        current_week = (weeks_diff % max(1, total_weeks)) + 1
+        
+        # 計算距離基準週開始的總天數
+        days_since_start = (today - base_monday).days
+    else:
+        current_week = 1
+        days_since_start = 0
     
     schedule_info = {
         "total_weeks": total_weeks,
         "current_week": current_week,
+        "base_date": base_date.isoformat() if base_date else None,
+        "calculation_method": "natural_week",
+        "days_since_start": days_since_start,
+        "weeks_diff": weeks_diff if base_date else 0,
         "weeks": []
     }
     
@@ -182,7 +276,7 @@ def update_member_schedule(week_num, members):
     Returns:
         dict: 操作結果
     """
-    global groups
+    global groups, base_date
     
     if not isinstance(week_num, int) or week_num < 1:
         return {"success": False, "message": "週數必須是大於 0 的整數"}
@@ -193,6 +287,12 @@ def update_member_schedule(week_num, members):
     # 確保 groups 是字典格式
     if not isinstance(groups, dict):
         groups = {}
+    
+    # 如果是第一次設定成員，記錄基準日期
+    if len(groups) == 0 and base_date is None:
+        base_date = date.today()
+        save_base_date(base_date)
+        print(f"DEBUG: 首次設定成員，記錄基準日期: {base_date}")
     
     # 更新指定週的成員
     groups[str(week_num)] = members.copy()
@@ -217,7 +317,7 @@ def add_member_to_week(week_num, member_name):
     Returns:
         dict: 操作結果
     """
-    global groups
+    global groups, base_date
     
     if not isinstance(week_num, int) or week_num < 1:
         return {"success": False, "message": "週數必須是大於 0 的整數"}
@@ -228,6 +328,12 @@ def add_member_to_week(week_num, member_name):
     # 確保 groups 是字典格式
     if not isinstance(groups, dict):
         groups = {}
+    
+    # 如果是第一次設定成員，記錄基準日期
+    if len(groups) == 0 and base_date is None:
+        base_date = date.today()
+        save_base_date(base_date)
+        print(f"DEBUG: 首次設定成員，記錄基準日期: {base_date}")
     
     # 初始化週數鍵值
     week_key = str(week_num)
@@ -304,11 +410,26 @@ def get_member_schedule_summary():
     schedule = get_member_schedule()
     
     if schedule["total_weeks"] == 0:
-        return "👥 尚未設定成員輪值表\n\n💡 使用「成員設定 1 小明 小華」來設定第1週的成員"
+        return "👥 尚未設定成員輪值表\n\n💡 使用「@setweek 1 小明,小華」來設定第1週的成員"
     
     summary = f"👥 垃圾收集成員輪值表\n\n"
     summary += f"📅 總共 {schedule['total_weeks']} 週輪值\n"
-    summary += f"📍 目前第 {schedule['current_week']} 週\n\n"
+    summary += f"📍 目前第 {schedule['current_week']} 週\n"
+    
+    # 顯示基準日期資訊
+    if schedule["base_date"]:
+        from datetime import datetime
+        base_date_obj = datetime.fromisoformat(schedule["base_date"]).date()
+        base_monday = base_date_obj - timedelta(days=base_date_obj.weekday())
+        
+        summary += f"📆 基準日期: {base_date_obj.strftime('%Y-%m-%d')}\n"
+        summary += f"📊 基準週一: {base_monday.strftime('%Y-%m-%d')}\n"
+        summary += f"🔄 計算方式: 自然週（週一到週日）\n"
+        
+        if schedule.get("weeks_diff", 0) > 0:
+            summary += f"⏳ 已經過: {schedule['weeks_diff']} 個自然週\n"
+    
+    summary += "\n"
     
     current_week_members = []
     
@@ -335,21 +456,27 @@ def get_member_schedule_summary():
 # ===== 清空/重置功能 =====
 def clear_all_members():
     """
-    清空所有成員輪值安排
+    清空所有成員輪值安排並重置基準日期
     
     Returns:
         dict: 操作結果
     """
-    global groups
+    global groups, base_date
     
     old_count = len(groups) if isinstance(groups, dict) else 0
+    old_base_date = base_date
+    
     groups = {}
+    base_date = None
+    
     save_groups()  # 立即儲存到檔案
+    reset_base_date()  # 重置基準日期
     
     return {
         "success": True,
-        "message": f"已清空所有成員輪值安排 (原有 {old_count} 週資料)",
-        "cleared_weeks": old_count
+        "message": f"已清空所有成員輪值安排並重置基準日期 (原有 {old_count} 週資料)",
+        "cleared_weeks": old_count,
+        "old_base_date": old_base_date.isoformat() if old_base_date else None
     }
 
 def clear_week_members(week_num):
@@ -409,30 +536,34 @@ def clear_all_group_ids():
 
 def reset_all_data():
     """
-    重置所有資料 (成員安排 + 群組 ID)
+    重置所有資料 (成員安排 + 群組 ID + 基準日期)
     
     Returns:
         dict: 操作結果
     """
-    global groups, group_ids
+    global groups, group_ids, base_date
     
     # 記錄原始資料
     old_groups_count = len(groups) if isinstance(groups, dict) else 0
     old_group_ids_count = len(group_ids)
+    old_base_date = base_date
     
     # 清空所有資料
     groups = {}
     group_ids = []
+    base_date = None
     
     # 儲存變更
     save_groups()
     save_group_ids()
+    reset_base_date()
     
     return {
         "success": True,
-        "message": f"已重置所有資料 (清空 {old_groups_count} 週成員安排 + {old_group_ids_count} 個群組 ID)",
+        "message": f"已重置所有資料 (清空 {old_groups_count} 週成員安排 + {old_group_ids_count} 個群組 ID + 基準日期)",
         "cleared_groups": old_groups_count,
-        "cleared_group_ids": old_group_ids_count
+        "cleared_group_ids": old_group_ids_count,
+        "old_base_date": old_base_date.isoformat() if old_base_date else None
     }
 
 def get_schedule_info():
@@ -481,7 +612,24 @@ def get_system_status():
     # 成員輪值狀態
     status += f"👥 成員輪值:\n"
     status += f"  └ 總週數: {groups_info['total_weeks']}\n"
-    status += f"  └ 目前週: {groups_info['current_week']}\n\n"
+    status += f"  └ 目前週: {groups_info['current_week']}\n"
+    status += f"  └ 計算方式: 自然週（週一到週日）\n"
+    
+    # 基準日期資訊
+    if groups_info.get('base_date'):
+        from datetime import datetime
+        base_date_obj = datetime.fromisoformat(groups_info['base_date']).date()
+        base_monday = base_date_obj - timedelta(days=base_date_obj.weekday())
+        
+        status += f"  └ 基準日期: {base_date_obj.strftime('%Y-%m-%d')}\n"
+        status += f"  └ 基準週一: {base_monday.strftime('%Y-%m-%d')}\n"
+        
+        if groups_info.get('weeks_diff', 0) > 0:
+            status += f"  └ 已過週數: {groups_info['weeks_diff']} 週\n"
+    else:
+        status += f"  └ 基準日期: 未設定\n"
+    
+    status += "\n"
     
     # 群組 ID 狀態
     status += f"📱 LINE 群組:\n"
@@ -624,18 +772,20 @@ mon, tue, wed, thu, fri, sat, sun
 @clear_groups - 清空所有群組 ID
 
 🔄 重置功能：
-@reset_all - 重置所有資料 (成員+群組)
+@reset_all - 重置所有資料 (成員+群組+基準日期)
+@reset_date - 重置基準日期為今天
 ⚠️ 此操作無法復原，請謹慎使用
 
 📊 系統管理：
 @status - 查看完整系統狀態
-包含：成員輪值狀態、群組狀態、排程狀態
+包含：成員輪值狀態、群組狀態、排程狀態、基準日期
 
 💡 管理建議：
 - 使用 @status 確認操作前的狀態
 - 漸進式清空：先清空特定週，再考慮全部清空
 - 重要資料請先記錄再執行重置
-- 清空操作會立即生效並持久化"""
+- 清空操作會立即生效並持久化
+- 基準日期影響週數計算，請謹慎重置"""
 
     else:  # 顯示所有指令概覽
         return """🤖 垃圾收集提醒 Bot 指令大全
@@ -673,13 +823,16 @@ mon, tue, wed, thu, fri, sat, sun
 🔄 管理功能：
 @status - 查看完整系統狀態
 @reset_all - 重置所有資料 (謹慎使用)
+@reset_date - 重置基準日期為今天
 
 💡 使用提示：
 - 所有時間都是台北時間
 - 群組 ID 會自動記住
 - 支援多群組推播
-- 成員輪值自動循環
+- 成員輪值基於自然週（週一到週日）計算
 - 所有設定都會持久化儲存
+- 第一次設定成員時會自動記錄基準日期
+- 週數按自然週循環，每個星期一自動切換
 
 ❓ 需要詳細說明請輸入：
 @help 類別名稱
@@ -1601,6 +1754,25 @@ def handle_message(event):
                     messages=[TextMessage(text="格式錯誤，請輸入 @removemember 週數 成員名\n例如: @removemember 1 Alice")]
                 )
                 messaging_api.reply_message(req)
+        
+        # 重置基準日期
+        if event.message.text.strip() == "@reset_date":
+            global base_date
+            old_base_date = base_date
+            base_date = date.today()
+            save_base_date(base_date)
+            
+            response_text = f"🔄 基準日期已重置\n"
+            response_text += f"舊基準日期: {old_base_date.strftime('%Y-%m-%d') if old_base_date else '未設定'}\n"
+            response_text += f"新基準日期: {base_date.strftime('%Y-%m-%d')}\n\n"
+            response_text += f"💡 從今天開始重新計算週數輪值"
+            
+            from linebot.v3.messaging.models import ReplyMessageRequest
+            req = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=response_text)]
+            )
+            messaging_api.reply_message(req)
         
         # 幫助指令
         if event.message.text.strip().startswith("@help"):
