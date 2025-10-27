@@ -7,6 +7,7 @@ from linebot.v3.messaging.models import PushMessageRequest, TextMessage
 from linebot.v3.webhooks import TextMessageContent, JoinEvent, LeaveEvent
 import os
 import json
+import requests
 
 # 載入 .env 檔案中的環境變數（僅在本地開發時使用）
 try:
@@ -1261,9 +1262,8 @@ def send_group_reminder(group_id):
             print(f"群組 {group_id} 沒有設定成員")
             return
         
-        # 取得當前週數和日期資訊
+        # 取得當前日期資訊
         today = datetime.now(pytz.timezone('Asia/Taipei')).date()
-        current_week = get_current_week()
         
         # 格式化日期和星期
         weekday_names = ["週一", "週二", "週三", "週四", "週五", "週六", "週日"]
@@ -1558,22 +1558,23 @@ def handle_message(event):
                 messaging_api.reply_message(req)
                 return
             
-            # 移除舊排程並建立新排程，明確指定時區
-            job.remove()
-            job = scheduler.add_job(
-                send_trash_reminder, 
-                CronTrigger(
-                    day_of_week=days, 
-                    hour=hour, 
-                    minute=minute,
-                    timezone=pytz.timezone('Asia/Taipei')  # 明確指定時區
-                )
-            )
+            group_id = get_group_id_from_event(event)
+            
+            if group_id:
+                # 更新該群組的排程設定
+                result = update_schedule(group_id, days, hour, minute)
+                
+                if result["success"]:
+                    message = f"✅ 群組推播時間已更新為 {days} {hour:02d}:{minute:02d} (台北時間)\n⏰ {result['schedule']['next_run']}"
+                else:
+                    message = f"❌ 設定失敗: {result['message']}"
+            else:
+                message = "❌ 無法取得群組資訊"
             
             from linebot.v3.messaging.models import ReplyMessageRequest
             req = ReplyMessageRequest(
                 reply_token=event.reply_token,
-                messages=[TextMessage(text=f"✅ 推播時間已更新為 {days} {hour:02d}:{minute:02d} (台北時間)\n⏰ 下次執行: {job.next_run_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")]
+                messages=[TextMessage(text=message)]
             )
             messaging_api.reply_message(req)
         else:
