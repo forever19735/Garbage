@@ -332,6 +332,190 @@ def get_member_schedule_summary():
     
     return summary
 
+# ===== 清空/重置功能 =====
+def clear_all_members():
+    """
+    清空所有成員輪值安排
+    
+    Returns:
+        dict: 操作結果
+    """
+    global groups
+    
+    old_count = len(groups) if isinstance(groups, dict) else 0
+    groups = {}
+    save_groups()  # 立即儲存到檔案
+    
+    return {
+        "success": True,
+        "message": f"已清空所有成員輪值安排 (原有 {old_count} 週資料)",
+        "cleared_weeks": old_count
+    }
+
+def clear_week_members(week_num):
+    """
+    清空指定週的成員安排
+    
+    Args:
+        week_num (int): 週數 (1-based)
+        
+    Returns:
+        dict: 操作結果
+    """
+    global groups
+    
+    if not isinstance(groups, dict):
+        groups = {}
+    
+    if not isinstance(week_num, int) or week_num < 1:
+        return {"success": False, "message": "週數必須是大於 0 的整數"}
+    
+    week_key = str(week_num)
+    
+    if week_key not in groups:
+        return {"success": False, "message": f"第 {week_num} 週沒有成員安排"}
+    
+    old_members = groups[week_key].copy()
+    del groups[week_key]
+    save_groups()  # 立即儲存到檔案
+    
+    return {
+        "success": True,
+        "message": f"已清空第 {week_num} 週的成員安排 (原有成員: {', '.join(old_members)})",
+        "week": week_num,
+        "cleared_members": old_members
+    }
+
+def clear_all_group_ids():
+    """
+    清空所有群組 ID
+    
+    Returns:
+        dict: 操作結果
+    """
+    global group_ids
+    
+    old_count = len(group_ids)
+    old_ids = group_ids.copy()
+    group_ids = []
+    save_group_ids()  # 立即儲存到檔案
+    
+    return {
+        "success": True,
+        "message": f"已清空所有群組 ID (原有 {old_count} 個)",
+        "cleared_count": old_count,
+        "cleared_ids": old_ids
+    }
+
+def reset_all_data():
+    """
+    重置所有資料 (成員安排 + 群組 ID)
+    
+    Returns:
+        dict: 操作結果
+    """
+    global groups, group_ids
+    
+    # 記錄原始資料
+    old_groups_count = len(groups) if isinstance(groups, dict) else 0
+    old_group_ids_count = len(group_ids)
+    
+    # 清空所有資料
+    groups = {}
+    group_ids = []
+    
+    # 儲存變更
+    save_groups()
+    save_group_ids()
+    
+    return {
+        "success": True,
+        "message": f"已重置所有資料 (清空 {old_groups_count} 週成員安排 + {old_group_ids_count} 個群組 ID)",
+        "cleared_groups": old_groups_count,
+        "cleared_group_ids": old_group_ids_count
+    }
+
+def get_schedule_info():
+    """
+    取得目前排程設定資訊
+    
+    Returns:
+        dict: 排程資訊
+    """
+    import pytz
+    from datetime import datetime
+    
+    # 取得排程器資訊
+    jobs = []
+    if 'scheduler' in globals() and scheduler.running:
+        for job in scheduler.get_jobs():
+            next_run = job.next_run_time.strftime('%Y-%m-%d %H:%M:%S %Z') if job.next_run_time else '無'
+            jobs.append({
+                "id": job.id,
+                "name": job.name or str(job.func),
+                "trigger": str(job.trigger),
+                "next_run": next_run
+            })
+    
+    return {
+        "scheduler_running": 'scheduler' in globals() and scheduler.running,
+        "timezone": "Asia/Taipei",
+        "current_time": datetime.now(pytz.timezone('Asia/Taipei')).strftime('%Y-%m-%d %H:%M:%S %Z'),
+        "jobs": jobs,
+        "job_count": len(jobs)
+    }
+
+def get_system_status():
+    """
+    取得系統狀態摘要
+    
+    Returns:
+        str: 格式化的系統狀態字串
+    """
+    # 取得各種資料狀態
+    groups_info = get_member_schedule()
+    group_ids_info = get_line_group_ids()
+    
+    status = "📊 系統狀態摘要\n\n"
+    
+    # 成員輪值狀態
+    status += f"👥 成員輪值:\n"
+    status += f"  └ 總週數: {groups_info['total_weeks']}\n"
+    status += f"  └ 目前週: {groups_info['current_week']}\n\n"
+    
+    # 群組 ID 狀態
+    status += f"📱 LINE 群組:\n"
+    status += f"  └ 群組數量: {group_ids_info['count']}\n"
+    if group_ids_info['group_ids']:
+        status += f"  └ 群組列表: {', '.join([gid[:8] + '...' for gid in group_ids_info['group_ids']])}\n\n"
+    else:
+        status += f"  └ 群組列表: 無\n\n"
+    
+    # 排程狀態
+    try:
+        schedule_info = get_schedule_info()
+        status += f"⏰ 排程設定:\n"
+        status += f"  └ 排程器: {'運行中' if schedule_info['scheduler_running'] else '已停止'}\n"
+        status += f"  └ 時區: {schedule_info['timezone']}\n"
+        status += f"  └ 任務數量: {schedule_info['job_count']}\n"
+        
+        if schedule_info['jobs']:
+            for job in schedule_info['jobs']:
+                status += f"  └ {job['name']}: {job['next_run']}\n"
+        
+        status += f"\n🕐 目前時間: {schedule_info['current_time']}"
+    except Exception as e:
+        status += f"⏰ 排程設定:\n"
+        status += f"  └ 狀態: 載入失敗 ({str(e)})\n"
+        
+        # 基本時間資訊
+        import pytz
+        from datetime import datetime
+        current_time = datetime.now(pytz.timezone('Asia/Taipei')).strftime('%Y-%m-%d %H:%M:%S %Z')
+        status += f"\n🕐 目前時間: {current_time}"
+    
+    return status
+
 # ===== 幫助功能 =====
 def get_help_message(category=None):
     """
@@ -379,7 +563,13 @@ mon, tue, wed, thu, fri, sat, sun"""
 @removemember 週數 成員名 - 從指定週移除成員
 範例：@removemember 1 Alice
 
-💡 提示：
+�️ 清空功能：
+@clear_week 週數 - 清空指定週的成員
+範例：@clear_week 1
+
+@clear_members - 清空所有週的成員安排
+
+�💡 提示：
 - 週數從 1 開始
 - 成員名稱支援中文和表情符號
 - 用逗號分隔多個成員，不要加空格"""
@@ -395,7 +585,10 @@ mon, tue, wed, thu, fri, sat, sun"""
 @debug - 自動添加當前群組 ID
 💡 在想要接收提醒的群組中輸入此指令
 
-📊 群組資訊說明：
+�️ 清空功能：
+@clear_groups - 清空所有群組 ID
+
+�📊 群組資訊說明：
 - 每個群組只需執行一次 @debug
 - 支援多個群組同時接收提醒
 - 群組 ID 以 'C' 開頭"""
@@ -408,10 +601,15 @@ mon, tue, wed, thu, fri, sat, sun"""
 💡 用於測試推播是否正常運作
 
 📊 查看資訊：
+@status - 完整系統狀態摘要
 @schedule - 排程資訊
 @members - 成員輪值表
 @groups - 群組列表
 @info - 詳細群組資訊
+
+🔄 重置功能：
+@reset_all - 重置所有資料 (成員+群組)
+⚠️ 此操作無法復原，請謹慎使用
 
 🆘 獲取幫助：
 @help - 顯示所有指令
@@ -1223,6 +1421,67 @@ def handle_message(event):
             req = ReplyMessageRequest(
                 reply_token=event.reply_token,
                 messages=[TextMessage(text=summary)]
+            )
+            messaging_api.reply_message(req)
+        
+        # 系統狀態查詢
+        if event.message.text.strip() == "@status":
+            status = get_system_status()
+            from linebot.v3.messaging.models import ReplyMessageRequest
+            req = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=status)]
+            )
+            messaging_api.reply_message(req)
+        
+        # 清空所有成員安排
+        if event.message.text.strip() == "@clear_members":
+            result = clear_all_members()
+            response_text = f"✅ {result['message']}" if result['success'] else f"❌ {result['message']}"
+            from linebot.v3.messaging.models import ReplyMessageRequest
+            req = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=response_text)]
+            )
+            messaging_api.reply_message(req)
+        
+        # 清空指定週成員 - 格式: @clear_week 1
+        if event.message.text.strip().startswith("@clear_week"):
+            import re
+            m = re.match(r"@clear_week (\d+)", event.message.text.strip())
+            if m:
+                week_num = int(m.group(1))
+                result = clear_week_members(week_num)
+                response_text = f"✅ {result['message']}" if result['success'] else f"❌ {result['message']}"
+            else:
+                response_text = "❌ 格式錯誤，請輸入 @clear_week 1 (清空第1週)"
+            
+            from linebot.v3.messaging.models import ReplyMessageRequest
+            req = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=response_text)]
+            )
+            messaging_api.reply_message(req)
+        
+        # 清空所有群組 ID
+        if event.message.text.strip() == "@clear_groups":
+            result = clear_all_group_ids()
+            response_text = f"✅ {result['message']}" if result['success'] else f"❌ {result['message']}"
+            from linebot.v3.messaging.models import ReplyMessageRequest
+            req = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=response_text)]
+            )
+            messaging_api.reply_message(req)
+        
+        # 重置所有資料
+        if event.message.text.strip() == "@reset_all":
+            result = reset_all_data()
+            response_text = f"🔄 {result['message']}"
+            from linebot.v3.messaging.models import ReplyMessageRequest
+            req = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=response_text)]
             )
             messaging_api.reply_message(req)
         
