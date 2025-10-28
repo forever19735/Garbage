@@ -171,7 +171,7 @@ def save_to_env_backup():
         all_data = {
             "group_ids": list(group_ids),  # 使用當前內存中的數據
             "groups": dict(groups),        # 使用當前內存中的數據
-            "base_date": base_date,        # 使用當前內存中的數據
+            "base_date": base_date.isoformat() if base_date else None,  # 序列化日期
             "group_schedules": dict(group_schedules)  # 使用當前內存中的數據
         }
         
@@ -199,7 +199,7 @@ def auto_backup():
         all_data = {
             "group_ids": list(group_ids),
             "groups": dict(groups),
-            "base_date": base_date,
+            "base_date": base_date.isoformat() if base_date else None,  # 序列化日期
             "group_schedules": dict(group_schedules)
         }
         
@@ -292,7 +292,7 @@ def restore_from_env_backup():
             if backup_data.get("base_date"):
                 global base_date
                 from datetime import datetime
-                base_date = datetime.fromisoformat(backup_data["base_date"]["base_date"]).date()
+                base_date = datetime.fromisoformat(backup_data["base_date"]).date()
                 save_base_date(base_date)
                 print(f"✅ 恢復基準日期: {base_date}")
             
@@ -417,6 +417,64 @@ def get_current_group(group_id=None):
     
     week_key = str(current_week)
     return group_data.get(week_key, [])
+
+def get_current_day_member(group_id, target_date=None):
+    """
+    取得當前日期對應的輪值成員（支援週內按日輪值）
+    
+    Args:
+        group_id (str): 群組ID
+        target_date (date): 目標日期，如果為None則使用今天
+    
+    Returns:
+        str: 當天負責的成員名稱，如果沒有則回傳None
+    """
+    if target_date is None:
+        target_date = date.today()
+    
+    # 取得該群組的成員列表
+    current_members = get_current_group(group_id)
+    if not current_members:
+        return None
+    
+    # 取得該群組的排程設定
+    if group_id not in group_schedules:
+        return current_members[0] if current_members else None
+    
+    schedule = group_schedules[group_id]
+    if 'days' not in schedule:
+        return current_members[0] if current_members else None
+    
+    # 取得推播日列表
+    broadcast_days = schedule['days']
+    if not isinstance(broadcast_days, list):
+        return current_members[0] if current_members else None
+    
+    # 將英文星期轉換為數字 (Monday=0, Sunday=6)
+    day_mapping = {
+        'mon': 0, 'tue': 1, 'wed': 2, 'thu': 3, 
+        'fri': 4, 'sat': 5, 'sun': 6
+    }
+    
+    # 取得今天是星期幾
+    today_weekday = target_date.weekday()
+    
+    # 檢查今天是否在推播日列表中
+    today_day_name = None
+    for day_name, day_num in day_mapping.items():
+        if day_num == today_weekday:
+            today_day_name = day_name
+            break
+    
+    if today_day_name not in broadcast_days:
+        return None  # 今天不是推播日
+    
+    # 找出今天是該週的第幾個推播日
+    day_index = broadcast_days.index(today_day_name)
+    
+    # 根據推播日的順序分配成員
+    member_index = day_index % len(current_members)
+    return current_members[member_index]
 
 # ===== 輔助函數 =====
 def get_group_id_from_event(event):
@@ -1458,33 +1516,29 @@ def update_schedule(group_id, days=None, hour=None, minute=None):
 
 def send_group_reminder(group_id):
     """
-    發送特定群組的垃圾收集提醒
+    發送特定群組的垃圾收集提醒（支援週內按日輪值）
     
     Args:
         group_id (str): 群組ID
     """
     try:
-        # 取得該群組的當前負責人
-        current_members = get_current_group(group_id)
-        
-        if not current_members:
-            print(f"群組 {group_id} 沒有設定成員")
-            return
-        
         # 取得當前日期資訊
         today = datetime.now(pytz.timezone('Asia/Taipei')).date()
+        
+        # 取得今天負責的成員（週內按日輪值）
+        responsible_member = get_current_day_member(group_id, today)
+        
+        if not responsible_member:
+            print(f"群組 {group_id} 今天沒有設定負責成員")
+            return
         
         # 格式化日期和星期
         weekday_names = ["週一", "週二", "週三", "週四", "週五", "週六", "週日"]
         weekday = weekday_names[today.weekday()]
         date_str = f"{today.month}/{today.day}"
         
-        # 建立提醒訊息
-        if len(current_members) == 1:
-            message = f"🗑️ 今天 {date_str} ({weekday}) 輪到 {current_members[0]} 收垃圾！"
-        else:
-            members_str = "、".join(current_members)
-            message = f"🗑️ 今天 {date_str} ({weekday}) 輪到 {members_str} 收垃圾！"
+        # 建立提醒訊息（顯示當天負責的單一成員）
+        message = f"🗑️ 今天 {date_str} ({weekday}) 輪到 {responsible_member} 收垃圾！"
         
         print(f"群組 {group_id} 推播訊息: {message}")
         
