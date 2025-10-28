@@ -68,6 +68,8 @@ def save_groups():
     try:
         with open(GROUPS_FILE, 'w', encoding='utf-8') as f:
             json.dump(groups, f, ensure_ascii=False, indent=2)
+        # 數據變更時自動備份
+        auto_backup()
     except Exception as e:
         pass
 
@@ -122,6 +124,8 @@ def save_group_schedules(schedules):
     try:
         with open(GROUP_SCHEDULES_FILE, 'w', encoding='utf-8') as f:
             json.dump(schedules, f, ensure_ascii=False, indent=2)
+        # 排程變更時自動備份
+        auto_backup()
         return True
     except Exception as e:
         print(f"儲存群組排程設定失敗: {e}")
@@ -137,13 +141,189 @@ base_date = load_base_date()  # 儲存基準日期（第一週開始日期）
 
 # 群組推播排程設定檔案
 GROUP_SCHEDULES_FILE = 'group_schedules.json'
-group_schedules = load_group_schedules()  # 儲存每個群組的推播設定
 
-# 從環境變數載入已知的群組 ID
+# ===== 環境變數持久化功能 =====
+PERSISTENT_DATA_KEY = "GARBAGE_BOT_PERSISTENT_DATA"
+
+def load_from_env_backup():
+    """從環境變數載入備份數據"""
+    try:
+        backup_data = os.environ.get(PERSISTENT_DATA_KEY)
+        if backup_data:
+            import base64
+            import gzip
+            
+            # 解碼壓縮的數據
+            compressed_data = base64.b64decode(backup_data.encode())
+            json_data = gzip.decompress(compressed_data).decode('utf-8')
+            data = json.loads(json_data)
+            
+            print("✅ 從環境變數恢復數據")
+            return data
+    except Exception as e:
+        print(f"⚠️ 環境變數恢復失敗: {e}")
+    return None
+
+def save_to_env_backup():
+    """將當前數據保存到環境變數（用於手動備份）"""
+    try:
+        # 收集當前內存中的數據（而不是重新從檔案載入）
+        all_data = {
+            "group_ids": list(group_ids),  # 使用當前內存中的數據
+            "groups": dict(groups),        # 使用當前內存中的數據
+            "base_date": base_date,        # 使用當前內存中的數據
+            "group_schedules": dict(group_schedules)  # 使用當前內存中的數據
+        }
+        
+        import base64
+        import gzip
+        
+        # 壓縮數據
+        json_data = json.dumps(all_data, ensure_ascii=False)
+        compressed_data = gzip.compress(json_data.encode('utf-8'))
+        encoded_data = base64.b64encode(compressed_data).decode()
+        
+        print(f"📊 備份數據大小: {len(encoded_data)} 字符")
+        print("💡 請將以下數據設定為環境變數 GARBAGE_BOT_PERSISTENT_DATA:")
+        print(f"```\n{encoded_data}\n```")
+        
+        return encoded_data
+    except Exception as e:
+        print(f"❌ 數據備份失敗: {e}")
+        return None
+
+def auto_backup():
+    """自動備份功能 - 靜默執行，不輸出詳細資訊"""
+    try:
+        # 收集當前內存中的數據
+        all_data = {
+            "group_ids": list(group_ids),
+            "groups": dict(groups),
+            "base_date": base_date,
+            "group_schedules": dict(group_schedules)
+        }
+        
+        import base64
+        import gzip
+        
+        # 壓縮數據
+        json_data = json.dumps(all_data, ensure_ascii=False)
+        compressed_data = gzip.compress(json_data.encode('utf-8'))
+        encoded_data = base64.b64encode(compressed_data).decode()
+        
+        # 將備份存到一個特殊的檔案中作為最近備份
+        with open('latest_backup.txt', 'w', encoding='utf-8') as f:
+            f.write(encoded_data)
+        
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(f"🔄 自動備份完成 ({timestamp}) - {len(encoded_data)} 字符")
+        
+        return encoded_data
+    except Exception as e:
+        print(f"⚠️ 自動備份失敗: {e}")
+        return None
+
+def trigger_auto_backup():
+    """觸發自動備份並通知用戶如何設定"""
+    backup_data = auto_backup()
+    if backup_data and LINE_CHANNEL_ACCESS_TOKEN:
+        # 如果有設定的群組，發送備份提醒到第一個群組
+        if group_ids:
+            try:
+                url = 'https://api.line.me/v2/bot/message/push'
+                headers = {
+                    'Authorization': f'Bearer {LINE_CHANNEL_ACCESS_TOKEN}',
+                    'Content-Type': 'application/json'
+                }
+                
+                message = f"""📱 自動備份提醒
+
+✅ 數據已自動備份完成
+💾 備份大小: {len(backup_data)} 字符
+
+🔧 如需在部署時保持設定，請：
+1. 複製檔案 latest_backup.txt 的內容
+2. 在部署平台設定環境變數：
+   GARBAGE_BOT_PERSISTENT_DATA=備份內容
+
+⚡ 或使用 @backup 指令查看完整備份資料"""
+
+                data = {
+                    'to': group_ids[0],  # 發送到第一個群組
+                    'messages': [{'type': 'text', 'text': message}]
+                }
+                
+                response = requests.post(url, headers=headers, json=data)
+                if response.status_code == 200:
+                    print(f"✅ 自動備份提醒已發送到群組: {group_ids[0]}")
+                else:
+                    print(f"⚠️ 發送備份提醒失敗: {response.status_code}")
+                    
+            except Exception as e:
+                print(f"⚠️ 發送自動備份提醒失敗: {e}")
+        
+    return backup_data
+
+def restore_from_env_backup():
+    """在啟動時嘗試從環境變數恢復數據"""
+    backup_data = load_from_env_backup()
+    if backup_data:
+        try:
+            # 恢復群組 ID
+            if backup_data.get("group_ids"):
+                global group_ids
+                group_ids.clear()
+                group_ids.extend(backup_data["group_ids"])
+                save_group_ids()
+                print(f"✅ 恢復群組 ID: {len(group_ids)} 個")
+            
+            # 恢復成員數據，修正 JSON 序列化的數字鍵問題
+            if backup_data.get("groups"):
+                global groups
+                groups.clear()
+                for group_id, weeks in backup_data["groups"].items():
+                    # 修正週數鍵從字串轉回數字
+                    groups[group_id] = {int(week): members for week, members in weeks.items()}
+                save_groups()
+                print(f"✅ 恢復成員數據: {len(groups)} 個群組")
+            
+            # 恢復基準日期
+            if backup_data.get("base_date"):
+                global base_date
+                from datetime import datetime
+                base_date = datetime.fromisoformat(backup_data["base_date"]["base_date"]).date()
+                save_base_date(base_date)
+                print(f"✅ 恢復基準日期: {base_date}")
+            
+            # 恢復排程設定
+            if backup_data.get("group_schedules"):
+                global group_schedules
+                group_schedules.clear()
+                group_schedules.update(backup_data["group_schedules"])
+                save_group_schedules(group_schedules)  # 傳遞參數
+                print(f"✅ 恢復排程設定: {len(group_schedules)} 個群組")
+                
+            return True
+        except Exception as e:
+            print(f"❌ 數據恢復失敗: {e}")
+    return False
+
+# 載入數據，優先從環境變數恢復
+if not restore_from_env_backup():
+    print("⚠️ 未找到環境變數備份，使用本地檔案載入")
+    group_schedules = load_group_schedules()  # 儲存每個群組的推播設定
+else:
+    print("✅ 已從環境變數恢復所有數據")
+
+# 從環境變數載入已知的群組 ID（補充載入，支援舊版設定）
 if os.getenv("LINE_GROUP_ID"):
     # 正確解析環境變數中的群組 ID（支援多個群組，以逗號分隔）
     env_group_ids = [gid.strip() for gid in os.getenv("LINE_GROUP_ID").split(",") if gid.strip()]
-    group_ids.extend(env_group_ids)
+    for gid in env_group_ids:
+        if gid not in group_ids:
+            group_ids.append(gid)
+            print(f"✅ 從 LINE_GROUP_ID 補充載入群組: {gid}")
 
 
 print("ACCESS_TOKEN:", LINE_CHANNEL_ACCESS_TOKEN)
@@ -929,14 +1109,21 @@ mon, tue, wed, thu, fri, sat, sun
 🔄 重置功能：
 @reset_all - 重置所有資料 (成員+群組+基準日期)
 @reset_date - 重置基準日期為今天
+@backup - 創建數據備份 (部署時保持設定)
 ⚠️ 此操作無法復原，請謹慎使用
 
 📊 系統管理：
 @status - 查看完整系統狀態
 包含：成員輪值狀態、群組狀態、排程狀態、基準日期
 
-💡 管理建議：
+� 數據備份：
+@backup - 產生環境變數備份資料
+適用於雲端部署平台 (Railway、Heroku)
+防止更新時遺失所有設定
+
+�💡 管理建議：
 - 使用 @status 確認操作前的狀態
+- 定期執行 @backup 備份重要資料
 - 漸進式清空：先清空特定週，再考慮全部清空
 - 重要資料請先記錄再執行重置
 - 清空操作會立即生效並持久化
@@ -1507,6 +1694,29 @@ def initialize_group_schedules():
 
 # 初始化排程
 initialize_group_schedules()
+
+# 添加每日自動備份任務
+try:
+    scheduler.add_job(
+        trigger_auto_backup,
+        'cron',
+        hour=2,  # 每天凌晨 2 點自動備份
+        minute=0,
+        timezone=pytz.timezone('Asia/Taipei'),
+        id='daily_auto_backup',
+        replace_existing=True
+    )
+    print("✅ 每日自動備份任務已設定（每天 02:00）")
+except Exception as e:
+    print(f"⚠️ 設定自動備份任務失敗: {e}")
+
+# 啟動時執行一次自動備份
+try:
+    trigger_auto_backup()
+    print("✅ 啟動時自動備份完成")
+except Exception as e:
+    print(f"⚠️ 啟動時備份失敗: {e}")
+
 scheduler.start()
 
 print(f"排程已啟動，目前有 {len(group_jobs)} 個群組排程")
@@ -1824,6 +2034,73 @@ def handle_message(event):
         if event.message.text.strip() == "@reset_all":
             result = reset_all_data()
             response_text = f"🔄 {result['message']}"
+            from linebot.v3.messaging.models import ReplyMessageRequest
+            req = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=response_text)]
+            )
+            messaging_api.reply_message(req)
+        
+        # 創建數據備份 - 產生環境變數備份資料
+        if event.message.text.strip() == "@backup":
+            try:
+                # 創建當前數據的備份
+                backup_data = save_to_env_backup()
+                
+                if backup_data:
+                    response_text = f"""✅ 數據備份已創建！
+
+📋 請在部署平台設定以下環境變數：
+
+環境變數名稱: GARBAGE_BOT_PERSISTENT_DATA
+環境變數值: {backup_data[:100]}...
+
+⚠️ 備份資料很長，請複製完整內容
+💾 完整備份資料請查看系統日誌
+🔄 下次部署時會自動恢復所有設定"""
+                else:
+                    response_text = "❌ 備份創建失敗，請檢查系統狀態"
+                
+            except Exception as e:
+                response_text = f"❌ 備份失敗: {str(e)}"
+            
+            from linebot.v3.messaging.models import ReplyMessageRequest
+            req = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=response_text)]
+            )
+            messaging_api.reply_message(req)
+        
+        # 查看最新自動備份
+        if event.message.text.strip() == "@latest_backup":
+            try:
+                if os.path.exists('latest_backup.txt'):
+                    with open('latest_backup.txt', 'r', encoding='utf-8') as f:
+                        backup_data = f.read().strip()
+                    
+                    from datetime import datetime
+                    # 取得檔案修改時間
+                    backup_time = datetime.fromtimestamp(os.path.getmtime('latest_backup.txt'))
+                    
+                    response_text = f"""📱 最新自動備份資料
+
+🕐 備份時間: {backup_time.strftime('%Y-%m-%d %H:%M:%S')}
+📦 備份大小: {len(backup_data)} 字符
+
+💾 環境變數設定：
+GARBAGE_BOT_PERSISTENT_DATA={backup_data[:100]}...
+
+💡 完整備份內容：
+{backup_data[:200]}...
+
+⚡ 提示：系統每天 02:00 自動備份
+🔄 數據變更時也會自動備份"""
+                else:
+                    response_text = "❌ 尚未產生自動備份檔案\n請等待系統自動備份或手動執行 @backup"
+                    
+            except Exception as e:
+                response_text = f"❌ 讀取備份失敗: {str(e)}"
+            
             from linebot.v3.messaging.models import ReplyMessageRequest
             req = ReplyMessageRequest(
                 reply_token=event.reply_token,
