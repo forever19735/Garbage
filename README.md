@@ -1,8 +1,14 @@
 # 🗑️ LINE 垃圾收集提醒 Bot
 
-智能成員輪值管理系統，支援自然週計算的 LINE Bot。自動推播提醒、彈性排程設定、多群組管理。
+智能群組輪值管理系統，支援 **每個群組獨立設定** 的 LINE Bot。自動推播提醒、彈性排程設定、多群組分別管理。
 
 ## ✨ 核心功能
+
+### 🏢 多群組獨立管理
+- **群組隔離**：每個 LINE 群組都有獨立的成員輪值表
+- **獨立排程**：每個群組可設定不同的推播時間和星期
+- **自動記錄**：Bot 加入群組時自動記錄，離開時自動清理
+- **分別推播**：不同群組在各自設定的時間收到個別提醒
 
 ### 🔄 自然週輪值系統
 - **智能計算**：基於真實週一到週日的自然週循環
@@ -11,15 +17,10 @@
 - **基準日期**：首次設定時自動記錄，可隨時重置
 
 ### ⏰ 彈性排程推播
-- **自訂時間**：任意設定推播時間（24小時制）
+- **群組專屬**：每個群組可設定專屬的推播時間
 - **多日推播**：支援一週內多天推播（週一到週日）
 - **即時預覽**：設定後立即顯示下次執行時間
 - **台北時區**：全程使用 Asia/Taipei 時區
-
-### 📱 多群組管理
-- **自動偵測**：Bot 加入群組後自動記錄群組 ID
-- **多群同步**：支援同時推播到多個 LINE 群組
-- **持久儲存**：群組設定永久保存，重啟後不遺失
 
 ### 🎛️ 豐富管理功能
 - **指令分類**：排程、成員、群組、測試等分類管理
@@ -39,7 +40,7 @@
 |-----------|------|--------|
 | `LINE_CHANNEL_ACCESS_TOKEN` | 從 LINE Developers 取得 | ✅ 必要 |
 | `LINE_CHANNEL_SECRET` | 從 LINE Developers 取得 | ✅ 必要 |
-| `LINE_GROUP_ID` | 群組 ID（可透過 `@debug` 指令自動取得） | ⚪ 可選 |
+| `LINE_GROUP_ID` | 群組 ID（Bot 會自動管理） | ⚪ 可選 |
 
 4. 部署完成後，將 Railway 提供的 URL 設定為 LINE Developers 的 Webhook URL
 
@@ -54,92 +55,119 @@
 ### 3. 初始設定（在 LINE 群組中）
 
 ```
-@debug                        # 添加群組 ID
-@settime 18:00               # 設定推播時間  
-@setday mon,thu              # 設定推播日期
-@setweek 1 Alice,Bob         # 設定第1週成員
-@setweek 2 Charlie,David     # 設定第2週成員
-@status                      # 檢查設定狀態
+@settime 18:00               # 設定本群組推播時間  
+@setday mon,thu              # 設定本群組推播日期
+@week 1 Alice,Bob            # 設定第1週成員
+@week 2 Charlie,David        # 設定第2週成員
+@schedule                    # 檢查本群組排程狀態
 ```
 
 ## 📋 指令大全
 
 ### 🔥 常用指令
-- `@schedule` - 查看推播排程
-- `@members` - 查看成員輪值表  
-- `@groups` - 查看群組設定
+- `@schedule` - 查看本群組推播排程
+- `@current` - 查看本週負責人
+- `@members` - 查看本群組完整輪值表  
 - `@status` - 查看系統狀態
-- `@debug` - 添加群組 ID
 
-### ⚙️ 排程設定
-- `@settime 18:30` - 設定推播時間
-- `@setday mon,thu` - 設定推播星期  
+### ⚙️ 排程設定（群組專屬）
+- `@settime 18:30` - 設定本群組推播時間
+- `@setday mon,thu` - 設定本群組推播星期  
 - `@setcron tue,fri 20 15` - 同時設定星期和時間
 
-### 👥 成員管理
-- `@setweek 1 Alice,Bob` - 設定第1週成員
+### 👥 成員管理（群組專屬）
+- `@week 1 Alice,Bob` - 設定第1週成員
 - `@addmember 1 Charlie` - 添加成員到第1週
 - `@removemember 1 Alice` - 從第1週移除成員
 - `@clear_week 1` - 清空第1週成員
-- `@clear_members` - 清空所有成員
 
-### 📱 群組管理
-- `@info` - 顯示詳細群組資訊
-- `@clear_groups` - 清空所有群組 ID
-
-### 🔄 重置功能
+###  重置功能
 - `@reset_date` - 重置基準日期為今天
-- `@reset_all` - 重置所有資料（謹慎使用）
 
 ### ❓ 幫助系統
 - `@help` - 顯示完整指令列表
 - `@help schedule` - 排程管理指令說明
 - `@help members` - 成員管理指令說明
-- `@help groups` - 群組管理指令說明
+- `@help manage` - 管理功能指令說明
+
+## 🎯 多群組使用情境
+
+### 情境：辦公室多部門各自管理
+
+**部門 A 群組設定：**
+```
+@settime 17:00               # A部門：每天 17:00 提醒
+@setday mon,wed,fri          # 週一、三、五提醒
+@week 1 張小明,李小華         # 第1週：張小明、李小華
+@week 2 王大雄               # 第2週：王大雄
+```
+
+**部門 B 群組設定：**
+```
+@settime 09:00               # B部門：每天 09:00 提醒
+@setday tue,thu              # 週二、四提醒
+@week 1 陳小美               # 第1週：陳小美
+@week 2 林志明,黃大同         # 第2週：林志明、黃大同
+```
+
+**實際運作效果：**
+- 部門 A：週一三五 17:00 收到自己的成員提醒
+- 部門 B：週二四 09:00 收到自己的成員提醒
+- 完全獨立運作，互不干擾
 
 ## 🛠️ 技術架構
 
 ### 核心技術棧
 - **Flask** - Web 框架
 - **LINE Bot SDK v3** - LINE 訊息處理
-- **APScheduler** - 背景排程任務
+- **APScheduler** - 背景排程任務（支援多群組排程）
 - **pytz** - 時區處理
 
 ### 特色設計
-- **持久化儲存**：使用 JSON 檔案儲存所有設定
+- **群組隔離儲存**：每個群組的資料完全分離
+- **獨立排程管理**：每個群組有自己的推播任務
 - **自然週算法**：基於週一為起始的真實週期計算
 - **容錯設計**：完整的例外處理和錯誤提示
 - **模組化結構**：清晰的功能分離和程式架構
 
-## 📊 使用範例
-
-### 情境：公司垃圾收集輪值
-
-**設定過程：**
+### 資料結構
+```json
+{
+  "groups.json": {
+    "C群組ID1": {
+      "1": ["Alice", "Bob"],
+      "2": ["Charlie"]
+    },
+    "C群組ID2": {
+      "1": ["David", "Eve"],
+      "2": ["Frank"]
+    }
+  },
+  "group_schedules.json": {
+    "C群組ID1": {
+      "days": "mon,wed,fri",
+      "hour": 17,
+      "minute": 0
+    },
+    "C群組ID2": {
+      "days": "tue,thu",
+      "hour": 9,
+      "minute": 30
+    }
+  }
+}
 ```
-# 1. 添加群組並設定排程
-@debug                        # 記錄群組 ID
-@settime 17:00               # 每天 17:00 提醒
-@setday mon,wed,fri          # 週一、三、五提醒
 
-# 2. 設定輪值成員（3週循環）
-@setweek 1 張小明,李小華      # 第1週：張小明、李小華
-@setweek 2 王大雄            # 第2週：王大雄
-@setweek 3 陳小美,林志明,黃大同 # 第3週：陳小美、林志明、黃大同
+## 📊 推播訊息範例
 
-# 3. 檢查設定
-@status                      # 檢視完整狀態
-@members                     # 檢視輪值表
+**群組 A 收到的訊息：**
+```
+🗑️ 今天 10/28 (週二) 輪到 Alice、Bob 收垃圾！
 ```
 
-**推播訊息範例：**
+**群組 B 收到的訊息：**
 ```
-🗑️ 垃圾收集提醒
-
-📅 日期：2025年10月27日 (週一)
-👥 本週負責人：張小明、李小華
-
-請記得收集垃圾！🙏
+🗑️ 今天 10/28 (週二) 輪到 David 收垃圾！
 ```
 
 ## 🔧 本地開發
@@ -151,8 +179,8 @@
 ### 安裝步驟
 ```bash
 # 1. 克隆專案
-git clone https://github.com/你的用戶名/垃圾收集提醒Bot.git
-cd 垃圾收集提醒Bot
+git clone https://github.com/forever19735/Garbage.git
+cd Garbage
 
 # 2. 安裝依賴
 pip install -r requirements.txt
@@ -167,18 +195,32 @@ python main.py
 
 ### 測試功能
 ```python
-# 測試成員輪值功能
-from main import get_current_group, get_member_schedule
+# 測試群組獨立功能
+from main import get_current_group, update_schedule
 
-# 查看當前負責人
-current = get_current_group()
-print(f"當前負責人: {current}")
+# 查看特定群組當前負責人
+current = get_current_group("C群組ID")
+print(f"群組當前負責人: {current}")
 
-# 查看完整排程
-schedule = get_member_schedule()
-print(f"總週數: {schedule['total_weeks']}")
-print(f"當前第 {schedule['current_week']} 週")
+# 設定群組專屬排程
+result = update_schedule("C群組ID", "mon,fri", 8, 30)
+print(f"排程設定結果: {result}")
 ```
+
+## 🎉 版本亮點
+
+### v2.0 - 多群組獨立管理
+- ✅ 每個群組獨立的成員輪值表
+- ✅ 每個群組獨立的推播時間設定
+- ✅ 群組專屬的指令處理
+- ✅ 自動群組管理（加入/離開）
+- ✅ 完全向後相容
+
+### 主要改進
+- **架構升級**：從單一全域管理升級到多群組隔離管理
+- **使用者體驗**：每個群組只看到自己的設定，不會被其他群組影響
+- **管理便利性**：不同群組可以有完全不同的輪值安排和時間
+- **擴充性**：支援無限數量的群組同時使用
 
 ## 🤝 貢獻指南
 
@@ -210,3 +252,5 @@ MIT License - 詳見 LICENSE 檔案
 ---
 
 ⭐ 如果這個專案對你有幫助，請給個 Star！
+
+🎯 **特色功能：真正的多群組獨立管理，每個群組都有自己的輪值表和推播時間！**
