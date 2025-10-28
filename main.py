@@ -564,7 +564,7 @@ def get_member_schedule_summary(group_id=None):
     
     if schedule["total_weeks"] == 0:
         group_info = f" (群組: {group_id})" if group_id and group_id != "legacy" else ""
-        return f"👥 尚未設定成員輪值表{group_info}\n\n💡 使用「@setweek 1 小明,小華」來設定第1週的成員"
+        return f"👥 尚未設定成員輪值表{group_info}\n\n💡 使用「@week 1 小明,小華」來設定第1週的成員"
     
     group_info = f" (群組: {schedule['group_id']})" if schedule['group_id'] != "legacy" else ""
     summary = f"👥 垃圾收集成員輪值表{group_info}\n\n"
@@ -838,14 +838,14 @@ def get_help_message(category=None):
 @schedule - 顯示目前推播排程
 
 ⚙️ 設定排程：
-@settime HH:MM - 設定推播時間
-範例：@settime 18:30
+@time HH:MM - 設定推播時間
+範例：@time 18:30
 
-@setday 星期 - 設定推播星期
-範例：@setday mon,thu
+@day 星期 - 設定推播星期
+範例：@day mon,thu
 
-@setcron 星期 時 分 - 同時設定星期和時間
-範例：@setcron tue,fri 20 15
+@cron 星期 時 分 - 同時設定星期和時間
+範例：@cron tue,fri 20 15
 
 📋 支援的星期格式：
 mon, tue, wed, thu, fri, sat, sun
@@ -862,8 +862,8 @@ mon, tue, wed, thu, fri, sat, sun
 @members - 顯示完整輪值表
 
 ⚙️ 管理成員：
-@setweek 週數 成員1,成員2 - 設定整週成員
-範例：@setweek 1 Alice,Bob,Charlie
+@week 週數 成員1,成員2 - 設定整週成員
+範例：@week 1 Alice,Bob,Charlie
 
 @addmember 週數 成員名 - 添加成員到指定週
 範例：@addmember 2 David
@@ -957,10 +957,10 @@ mon, tue, wed, thu, fri, sat, sun
 @status - 查看系統狀態
 
 ⚙️ 快速設定：
-@settime 18:30 - 設定推播時間
-@setday mon,thu - 設定推播星期
-@setcron mon,thu 18 30 - 同時設定星期和時間
-@setweek 1 Alice,Bob - 設定第1週成員
+@time 18:30 - 設定推播時間
+@day mon,thu - 設定推播星期
+@cron mon,thu 18 30 - 同時設定星期和時間
+@week 1 Alice,Bob - 設定第1週成員
 
 👥 成員管理：
 @addmember 1 Charlie - 添加成員到第1週
@@ -991,8 +991,8 @@ mon, tue, wed, thu, fri, sat, sun
 
 🏃‍♂️ 新手快速開始：
 1. 將 Bot 加入群組 (自動記錄群組)
-2. 輸入 @settime 18:00 (設定提醒時間)
-3. 輸入 @setweek 1 姓名1,姓名2 (設定成員)
+2. 輸入 @time 18:00 (設定提醒時間)
+3. 輸入 @week 1 姓名1,姓名2 (設定成員)
 4. 輸入 @status (查看設定狀態)"""
 
 def get_command_examples():
@@ -1006,19 +1006,19 @@ def get_command_examples():
 
 🏃‍♂️ 快速開始：
 1. 將 Bot 加入群組 - 自動記錄群組 ID
-2. @settime 18:00 - 設定晚上6點推播
-3. @setweek 1 Alice,Bob - 設定第1週成員
+2. @time 18:00 - 設定晚上6點推播
+3. @week 1 Alice,Bob - 設定第1週成員
 4. @status - 查看設定狀態
 
 ⏰ 排程設定範例：
-@settime 07:30 - 早上7:30提醒
-@settime 18:00 - 晚上6:00提醒
-@setday mon,wed,fri - 週一三五提醒
-@setcron sat,sun 09 00 - 週末早上9:00
+@time 07:30 - 早上7:30提醒
+@time 18:00 - 晚上6:00提醒
+@day mon,wed,fri - 週一三五提醒
+@cron sat,sun 09 00 - 週末早上9:00
 
 👥 成員管理範例：
-@setweek 1 小明,小華 - 第1週：小明、小華
-@setweek 2 小美,小強 - 第2週：小美、小強
+@week 1 小明,小華 - 第1週：小明、小華
+@week 2 小美,小強 - 第2週：小美、小強
 @addmember 1 小李 - 第1週加入小李
 @removemember 2 小強 - 第2週移除小強
 
@@ -1034,8 +1034,8 @@ def get_command_examples():
 @groups - 確認群組設定
 
 💡 實用技巧：
-- 用表情符號標記成員：@setweek 1 Alice🌟,Bob🔥
-- 設定備用成員：@setweek 3 主要成員,備用成員
+- 用表情符號標記成員：@week 1 Alice🌟,Bob🔥
+- 設定備用成員：@week 3 主要成員,備用成員
 - 查看下次提醒：@schedule"""
 
 # ===== 取得目前設定的群組 ID =====
@@ -1425,7 +1425,7 @@ def send_trash_reminder():
         print(f"群組 {gid} 當前成員: {group}")
         
         if not group:
-            message = f"🗑️ 今天 {today.strftime('%m/%d')} ({weekday_names[weekday]}) 是收垃圾日！\n💡 請設定成員輪值表\n\n使用指令：@setweek 1 成員1,成員2"
+            message = f"🗑️ 今天 {today.strftime('%m/%d')} ({weekday_names[weekday]}) 是收垃圾日！\n💡 請設定成員輪值表\n\n使用指令：@week 1 成員1,成員2"
             person = "未設定成員"
         else:
             # 根據星期決定誰收垃圾（可自訂規則）
@@ -1553,9 +1553,9 @@ def callback():
 @handler.add(MessageEvent)
 def handle_message(event):
     # 使用者設定推播星期、時、分指令
-    if event.message.text.strip().startswith("@setcron"):
+    if event.message.text.strip().startswith("@cron"):
         import re
-        m = re.match(r"@setcron ([a-z,]+) (\d{1,2}) (\d{1,2})", event.message.text.strip())
+        m = re.match(r"@cron ([a-z,]+) (\d{1,2}) (\d{1,2})", event.message.text.strip())
         if m:
             days = m.group(1)
             hour = int(m.group(2))
@@ -1603,14 +1603,14 @@ def handle_message(event):
             from linebot.v3.messaging.models import ReplyMessageRequest
             req = ReplyMessageRequest(
                 reply_token=event.reply_token,
-                messages=[TextMessage(text="格式錯誤，請輸入 @setcron mon,thu 18 30")]
+                messages=[TextMessage(text="格式錯誤，請輸入 @cron mon,thu 18 30")]
             )
             messaging_api.reply_message(req)
 
     # 使用者設定推播星期指令
-    if event.message.text.strip().startswith("@setday"):
+    if event.message.text.strip().startswith("@day"):
         import re
-        m = re.match(r"@setday ([a-z,]+)", event.message.text.strip())
+        m = re.match(r"@day ([a-z,]+)", event.message.text.strip())
         if m:
             days = m.group(1)
             group_id = get_group_id_from_event(event)
@@ -1636,7 +1636,7 @@ def handle_message(event):
             from linebot.v3.messaging.models import ReplyMessageRequest
             req = ReplyMessageRequest(
                 reply_token=event.reply_token,
-                messages=[TextMessage(text="格式錯誤，請輸入 @setday mon,thu")]
+                messages=[TextMessage(text="格式錯誤，請輸入 @day mon,thu")]
             )
             messaging_api.reply_message(req)
 
@@ -1645,9 +1645,9 @@ def handle_message(event):
         print("來源:", event.source)
 
         # 使用者設定推播時間指令
-        if event.message.text.strip().startswith("@settime"):
+        if event.message.text.strip().startswith("@time"):
             import re
-            m = re.match(r"@settime (\d{1,2}):(\d{2})", event.message.text.strip())
+            m = re.match(r"@time (\d{1,2}):(\d{2})", event.message.text.strip())
             if m:
                 hour = int(m.group(1))
                 minute = int(m.group(2))
@@ -1694,7 +1694,7 @@ def handle_message(event):
                 from linebot.v3.messaging.models import ReplyMessageRequest
                 req = ReplyMessageRequest(
                     reply_token=event.reply_token,
-                    messages=[TextMessage(text="格式錯誤，請輸入 @settime HH:MM")]
+                    messages=[TextMessage(text="格式錯誤，請輸入 @time HH:MM")]
                 )
                 messaging_api.reply_message(req)
 
@@ -1831,10 +1831,10 @@ def handle_message(event):
             )
             messaging_api.reply_message(req)
         
-        # 設定指定週的成員 - 格式: @setweek 1 成員1,成員2
-        if event.message.text.strip().startswith("@setweek"):
+        # 設定指定週的成員 - 格式: @week 1 成員1,成員2
+        if event.message.text.strip().startswith("@week"):
             import re
-            m = re.match(r"@setweek (\d+) (.+)", event.message.text.strip())
+            m = re.match(r"@week (\d+) (.+)", event.message.text.strip())
             if m:
                 week_num = int(m.group(1))
                 members_str = m.group(2)
@@ -1855,7 +1855,7 @@ def handle_message(event):
                 from linebot.v3.messaging.models import ReplyMessageRequest
                 req = ReplyMessageRequest(
                     reply_token=event.reply_token,
-                    messages=[TextMessage(text="格式錯誤，請輸入 @setweek 週數 成員1,成員2\n例如: @setweek 1 Alice,Bob")]
+                    messages=[TextMessage(text="格式錯誤，請輸入 @week 週數 成員1,成員2\n例如: @week 1 Alice,Bob")]
                 )
                 messaging_api.reply_message(req)
         
@@ -1971,8 +1971,8 @@ def handle_join(event):
 ✅ 群組 ID 已自動記錄：{group_id[:8]}...
 
 🚀 快速開始：
-@setcron mon,thu 14 55 - 設定提醒星期和時間
-@setweek 1 姓名1,姓名2 - 設定輪值成員
+@cron mon,thu 14 55 - 設定提醒星期和時間
+@week 1 姓名1,姓名2 - 設定輪值成員
 @help - 查看完整指令
 
 💡 提示：所有設定都會自動儲存，重啟後不會遺失！"""
