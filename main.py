@@ -17,6 +17,17 @@ except ImportError:
     # 在生產環境中（如 Railway）沒有 python-dotenv，直接忽略
     pass
 
+# 導入 Railway API 管理器
+try:
+    from railway_api import railway_api
+    RAILWAY_AVAILABLE = True
+    print("✅ Railway API 服務已載入")
+except ImportError as e:
+    RAILWAY_AVAILABLE = False
+    railway_api = None
+    print(f"⚠️ Railway API 服務未安裝: {e}")
+    print("將使用傳統環境變數備份方式")
+
 app = Flask(__name__)
 
 # 持久化檔案路徑
@@ -218,6 +229,17 @@ def auto_backup():
         from datetime import datetime
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         print(f"🔄 自動備份完成 ({timestamp}) - {len(encoded_data)} 字符")
+        
+        # 嘗試自動更新 Railway 環境變數
+        if RAILWAY_AVAILABLE and railway_api.is_configured():
+            success = railway_api.update_environment_variable(
+                "GARBAGE_BOT_PERSISTENT_DATA", 
+                encoded_data
+            )
+            if success:
+                print("🚀 Railway 環境變數已自動同步")
+            else:
+                print("⚠️ Railway 環境變數同步失敗，請手動更新")
         
         return encoded_data
     except Exception as e:
@@ -1174,14 +1196,21 @@ mon, tue, wed, thu, fri, sat, sun
 @status - 查看完整系統狀態
 包含：成員輪值狀態、群組狀態、排程狀態、基準日期
 
-� 數據備份：
+💾 數據備份：
 @backup - 產生環境變數備份資料
+@latest_backup - 查看最新自動備份內容
 適用於雲端部署平台 (Railway、Heroku)
 防止更新時遺失所有設定
 
-�💡 管理建議：
+🚀 Railway 自動化：
+@railway_status - 檢查 Railway API 連線狀態
+@railway_sync - 手動同步備份到 Railway
+自動更新 GARBAGE_BOT_PERSISTENT_DATA 環境變數
+
+💡 管理建議：
 - 使用 @status 確認操作前的狀態
 - 定期執行 @backup 備份重要資料
+- 設定 RAILWAY_API_TOKEN 啟用自動同步
 - 漸進式清空：先清空特定週，再考慮全部清空
 - 重要資料請先記錄再執行重置
 - 清空操作會立即生效並持久化
@@ -2160,6 +2189,120 @@ def handle_message(event):
         
         # 查看最新自動備份
         if event.message.text.strip() == "@latest_backup":
+            try:
+                if os.path.exists('latest_backup.txt'):
+                    with open('latest_backup.txt', 'r', encoding='utf-8') as f:
+                        backup_content = f.read()
+                    
+                    response_text = f"""📋 最新自動備份資料
+
+環境變數名稱: GARBAGE_BOT_PERSISTENT_DATA
+環境變數值: {backup_content[:100]}...
+
+⚠️ 完整備份資料很長 ({len(backup_content)} 字符)
+💾 請複製檔案 latest_backup.txt 的完整內容
+🔄 在部署平台設定此環境變數可避免資料遺失"""
+                else:
+                    response_text = "❌ 尚無自動備份資料"
+                    
+            except Exception as e:
+                response_text = f"❌ 讀取備份失敗: {str(e)}"
+            
+            from linebot.v3.messaging.models import ReplyMessageRequest
+            req = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=response_text)]
+            )
+            messaging_api.reply_message(req)
+
+        # Railway 設定狀態檢查
+        if event.message.text.strip() == "@railway_status":
+            try:
+                if RAILWAY_AVAILABLE and railway_api.is_configured():
+                    # 嘗試取得環境變數來測試連線
+                    env_vars = railway_api.get_environment_variables()
+                    if env_vars is not None:
+                        response_text = f"""✅ Railway API 連線正常
+
+🔧 已配置的環境變數: {len(env_vars)} 個
+📡 API Token: 已設定
+🚀 自動同步: 啟用
+
+使用 @railway_sync 手動同步備份資料"""
+                    else:
+                        response_text = """⚠️ Railway API 連線異常
+
+🔧 請檢查 RAILWAY_API_TOKEN 是否正確
+📡 可能的問題：
+- API Token 無效
+- 專案權限不足
+- 網路連線問題"""
+                elif RAILWAY_AVAILABLE:
+                    response_text = """❌ Railway API 未配置
+
+請設定以下環境變數：
+- RAILWAY_API_TOKEN (必需)
+- RAILWAY_PROJECT_ID (可選，會自動偵測)
+- RAILWAY_SERVICE_ID (可選，會自動偵測)"""
+                else:
+                    response_text = """❌ Railway API 功能未啟用
+
+Railway API 模組載入失敗，請檢查：
+- railway_api.py 檔案是否存在
+- requests 套件是否已安裝"""
+                    
+            except Exception as e:
+                response_text = f"❌ Railway 狀態檢查失敗: {str(e)}"
+            
+            from linebot.v3.messaging.models import ReplyMessageRequest
+            req = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=response_text)]
+            )
+            messaging_api.reply_message(req)
+
+        # Railway 手動同步
+        if event.message.text.strip() == "@railway_sync":
+            try:
+                if not RAILWAY_AVAILABLE:
+                    response_text = "❌ Railway API 功能未啟用"
+                elif not railway_api.is_configured():
+                    response_text = "❌ Railway API 未配置，請先設定 RAILWAY_API_TOKEN"
+                else:
+                    # 創建最新備份
+                    backup_data = auto_backup()
+                    if backup_data:
+                        success = railway_api.update_environment_variable(
+                            "GARBAGE_BOT_PERSISTENT_DATA", 
+                            backup_data
+                        )
+                        if success:
+                            response_text = f"""✅ Railway 環境變數同步成功！
+
+💾 已更新: GARBAGE_BOT_PERSISTENT_DATA
+📏 資料大小: {len(backup_data)} 字符
+🔄 下次部署時會自動恢復所有設定"""
+                        else:
+                            response_text = """❌ Railway 環境變數更新失敗
+
+可能原因：
+- API Token 權限不足
+- 專案或服務 ID 錯誤
+- 網路連線問題
+
+請檢查設定或嘗試手動更新"""
+                    else:
+                        response_text = "❌ 備份資料創建失敗"
+                    
+            except Exception as e:
+                response_text = f"❌ Railway 同步失敗: {str(e)}"
+            
+            from linebot.v3.messaging.models import ReplyMessageRequest
+            req = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=response_text)]
+            )
+            messaging_api.reply_message(req)
             try:
                 if os.path.exists('latest_backup.txt'):
                     with open('latest_backup.txt', 'r', encoding='utf-8') as f:
