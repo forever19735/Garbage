@@ -1468,7 +1468,13 @@ def update_schedule(group_id, days=None, hour=None, minute=None):
         
         # 驗證星期格式
         valid_days = {'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'}
-        day_list = [d.strip() for d in days.split(',')]
+        
+        # 支援字串和陣列兩種格式
+        if isinstance(days, list):
+            day_list = [d.strip() for d in days]
+        else:
+            day_list = [d.strip() for d in days.split(',')]
+            
         if not all(day in valid_days for day in day_list):
             return {"success": False, "message": "星期格式無效，請使用 mon,tue,wed,thu,fri,sat,sun"}
         
@@ -1477,12 +1483,35 @@ def update_schedule(group_id, days=None, hour=None, minute=None):
             group_jobs[group_id].remove()
             del group_jobs[group_id]
         
+        # 轉換星期格式給 APScheduler
+        if isinstance(days, list):
+            # 如果是列表，轉換為逗號分隔的字串
+            days_str = ",".join(days)
+        else:
+            # 如果已經是字串，直接使用
+            days_str = days
+            
+        # 將英文星期轉換為 APScheduler 接受的格式
+        day_mapping = {
+            'mon': '0', 'tue': '1', 'wed': '2', 'thu': '3',
+            'fri': '4', 'sat': '5', 'sun': '6'
+        }
+        
+        # 轉換星期為數字格式
+        day_numbers = []
+        for day in days_str.split(','):
+            day = day.strip()
+            if day in day_mapping:
+                day_numbers.append(day_mapping[day])
+        
+        apscheduler_days = ",".join(day_numbers)
+        
         # 建立新排程，明確指定時區
         from apscheduler.triggers.cron import CronTrigger
         job = scheduler.add_job(
             lambda: send_group_reminder(group_id), 
             CronTrigger(
-                day_of_week=days, 
+                day_of_week=apscheduler_days, 
                 hour=hour, 
                 minute=minute,
                 timezone=pytz.timezone('Asia/Taipei')  # 明確指定時區
@@ -1593,11 +1622,15 @@ def get_schedule_summary(group_id=None):
             "fri": "週五", "sat": "週六", "sun": "週日"
         }
         
-        if "," in days:
+        # 支援字串和陣列兩種格式
+        if isinstance(days, list):
+            day_list = [day_mapping.get(d.strip(), d.strip()) for d in days]
+            days_chinese = "、".join(day_list)
+        elif isinstance(days, str) and "," in days:
             day_list = [day_mapping.get(d.strip(), d.strip()) for d in days.split(",")]
             days_chinese = "、".join(day_list)
         else:
-            days_chinese = day_mapping.get(days.strip(), days.strip())
+            days_chinese = day_mapping.get(days.strip() if isinstance(days, str) else str(days), str(days))
         
         # 格式化時間顯示
         hour = details.get("hour", 0)
