@@ -1010,7 +1010,7 @@ mon, tue, wed, thu, fri, sat, sun
 類別：schedule, members, groups"""
 
     else:  # 顯示所有指令概覽
-        return """🤖 垃圾收集提醒 Bot 指令大全
+        return """🤖 垃圾輪值提醒 Bot 指令大全
 
  常用指令：
 @schedule - 查看推播排程
@@ -1042,8 +1042,8 @@ mon, tue, wed, thu, fri, sat, sun
 
 🏃‍♂️ 新手快速開始：
 1. 將 Bot 加入群組 (自動記錄群組)
-2. 輸入 @time 18:00 (設定提醒時間)
-3. 輸入 @week 1 姓名1,姓名2 (設定成員)
+2. 輸入 @cron mon,thu 11 38 (設定提醒星期和時間)
+3. 輸入 @week 1 姓名1,姓名2 (設定第幾週成員)
 
 ❓ 需要詳細說明請輸入：@help 類別名稱"""
 
