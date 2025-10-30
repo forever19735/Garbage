@@ -231,8 +231,9 @@ def get_current_group(group_id=None):
     
     today = date.today()
     
-    # 如果沒有基準日期，使用當天作為第一週的開始
-    if base_date is None:
+    # 檢查並修復 base_date 的類型
+    if base_date is None or not isinstance(base_date, date):
+        print(f"⚠️ base_date 類型錯誤: {type(base_date)}, 值: {base_date}, 重置為今天")
         base_date = today
         save_base_date(base_date)
     
@@ -404,8 +405,10 @@ def get_member_schedule(group_id=None):
     total_weeks = len(group_data)
     today = date.today()
     
-    # 如果沒有基準日期且有成員設定，使用當天作為基準
-    if base_date is None and total_weeks > 0:
+    # 檢查並修復 base_date 的類型，如果沒有基準日期且有成員設定，使用當天作為基準
+    if (base_date is None or not isinstance(base_date, date)) and total_weeks > 0:
+        if base_date is not None:
+            print(f"⚠️ base_date 類型錯誤: {type(base_date)}, 值: {base_date}, 重置為今天")
         base_date = today
         save_base_date(base_date)
     
