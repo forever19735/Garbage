@@ -18,183 +18,127 @@ except ImportError:
     # 在生產環境中（如 Railway）沒有 python-dotenv，直接忽略
     pass
 
+# ===== 統一資料管理類別 =====
+class DataManager:
+    """統一的資料管理類別，完全使用 Firebase 存儲"""
+    
+    def __init__(self):
+        self.firebase_service = firebase_service.firebase_service_instance
+    
+    def load_data(self, data_type, default_value=None):
+        """從 Firebase 載入資料"""
+        if not self.firebase_service.is_available():
+            print(f"⚠️ Firebase 未連接，無法載入 {data_type}")
+            return default_value if default_value is not None else ([] if data_type in ['group_ids'] else {})
+        
+        try:
+            if data_type == 'group_ids':
+                firebase_data = self.firebase_service.load_group_ids()
+            elif data_type == 'groups':
+                firebase_data = self.firebase_service.load_groups()
+            elif data_type == 'base_date':
+                firebase_data = self.firebase_service.load_base_date()
+            elif data_type == 'group_schedules':
+                firebase_data = self.firebase_service.load_group_schedules()
+            else:
+                firebase_data = None
+            
+            if firebase_data is not None:
+                return firebase_data
+        except Exception as e:
+            print(f"⚠️ 從 Firebase 載入 {data_type} 失敗: {e}")
+        
+        return default_value if default_value is not None else ([] if data_type in ['group_ids'] else {})
+    
+    def save_data(self, data_type, data):
+        """儲存資料到 Firebase"""
+        if not self.firebase_service.is_available():
+            print(f"⚠️ Firebase 未連接，無法儲存 {data_type}")
+            return False
+        
+        try:
+            if data_type == 'group_ids':
+                return self.firebase_service.save_group_ids(data)
+            elif data_type == 'groups':
+                return self.firebase_service.save_groups(data)
+            elif data_type == 'base_date':
+                return self.firebase_service.save_base_date(data)
+            elif data_type == 'group_schedules':
+                return self.firebase_service.save_group_schedules(data)
+        except Exception as e:
+            print(f"⚠️ 儲存 {data_type} 到 Firebase 失敗: {e}")
+            return False
+        
+        return False
+    
+    def delete_data(self, data_type):
+        """從 Firebase 刪除資料"""
+        if not self.firebase_service.is_available():
+            print(f"⚠️ Firebase 未連接，無法刪除 {data_type}")
+            return False
+        
+        try:
+            if data_type == 'base_date':
+                return self.firebase_service.reset_base_date()
+        except Exception as e:
+            print(f"⚠️ 從 Firebase 刪除 {data_type} 失敗: {e}")
+            return False
+        
+        return False
+
+# 創建全域資料管理器實例
+data_manager = DataManager()
+
 app = Flask(__name__)
 
-# 持久化檔案路徑
-GROUP_IDS_FILE = "group_ids.json"
-GROUPS_FILE = "groups.json"  # 將改為分群組儲存: {group_id: {week: [members]}}
-BASE_DATE_FILE = "base_date.json"
-GROUP_SETTINGS_FILE = "group_settings.json"  # 新增：每個群組的個別設定
-
-# ===== 持久化功能 =====
+# ===== 簡化的資料操作函數 =====
 def load_group_ids():
-    """從 Firebase 或本地檔案載入群組 ID 列表"""
-    # 優先嘗試從 Firebase 載入
-    if firebase_service.firebase_service_instance.is_available():
-        firebase_ids = firebase_service.firebase_service_instance.load_group_ids()
-        if firebase_ids:
-            return firebase_ids
-    
-    # Firebase 不可用時，回退到本地檔案
-    try:
-        if os.path.exists(GROUP_IDS_FILE):
-            with open(GROUP_IDS_FILE, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                return data
-    except Exception as e:
-        pass
-    return []
+    """載入群組 ID 列表"""
+    return data_manager.load_data('group_ids', [])
 
 def save_group_ids():
-    """將群組 ID 列表儲存到 Firebase 和本地檔案"""
-    # 儲存到 Firebase
-    firebase_success = False
-    if firebase_service.firebase_service_instance.is_available():
-        firebase_success = firebase_service.firebase_service_instance.save_group_ids(group_ids)
-    
-    # 同時保存到本地檔案作為備份
-    try:
-        with open(GROUP_IDS_FILE, 'w', encoding='utf-8') as f:
-            json.dump(group_ids, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        pass
-    
-    return firebase_success
+    """儲存群組 ID 列表"""
+    return data_manager.save_data('group_ids', group_ids)
 
 def load_groups():
-    """從 Firebase 或本地檔案載入成員群組資料"""
-    # 優先嘗試從 Firebase 載入
-    if firebase_service.firebase_service_instance.is_available():
-        firebase_groups = firebase_service.firebase_service_instance.load_groups()
-        if firebase_groups:
-            return firebase_groups
-    
-    # Firebase 不可用時，回退到本地檔案
-    try:
-        if os.path.exists(GROUPS_FILE):
-            with open(GROUPS_FILE, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                # 向後相容：如果是舊格式（直接是 week: [members]），轉換為新格式
-                if data and isinstance(data, dict):
-                    # 檢查是否為舊格式（key 是數字字串，代表週數）
-                    if any(key.isdigit() for key in data.keys()):
-                        # 舊格式，需要轉換為新格式
-                        return {"legacy": data}  # 用 "legacy" 作為預設群組ID
-                    # 新格式，直接返回
-                    return data
-    except Exception as e:
-        pass
-    return {}
+    """載入成員群組資料"""
+    return data_manager.load_data('groups', {})
 
 def save_groups():
-    """將成員群組資料儲存到 Firebase 和本地檔案"""
-    # 儲存到 Firebase
-    firebase_success = False
-    if firebase_service.firebase_service_instance.is_available():
-        firebase_success = firebase_service.firebase_service_instance.save_groups(groups)
-    
-    # 同時保存到本地檔案作為備份
-    try:
-        with open(GROUPS_FILE, 'w', encoding='utf-8') as f:
-            json.dump(groups, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        pass
-    
+    """儲存成員群組資料"""
+    result = data_manager.save_data('groups', groups)
     # 數據變更時自動備份
     auto_backup()
-    return firebase_success
+    return result
 
 def load_base_date():
-    """從 Firebase 或本地檔案載入基準日期"""
-    # 優先嘗試從 Firebase 載入
-    if firebase_service.firebase_service_instance.is_available():
-        firebase_date = firebase_service.firebase_service_instance.load_base_date()
-        if firebase_date:
-            return firebase_date
-    
-    # Firebase 不可用時，回退到本地檔案
-    try:
-        if os.path.exists(BASE_DATE_FILE):
-            with open(BASE_DATE_FILE, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                from datetime import datetime
-                base_date = datetime.fromisoformat(data["base_date"]).date()
-                return base_date
-    except Exception as e:
-        pass
-    return None
+    """載入基準日期"""
+    return data_manager.load_data('base_date')
 
 def save_base_date(base_date):
-    """將基準日期儲存到 Firebase 和本地檔案"""
-    # 儲存到 Firebase
-    firebase_success = False
-    if firebase_service.firebase_service_instance.is_available():
-        firebase_success = firebase_service.firebase_service_instance.save_base_date(base_date)
-    
-    # 同時保存到本地檔案作為備份
-    try:
-        data = {
-            "base_date": base_date.isoformat(),
-            "set_at": datetime.now().isoformat()
-        }
-        with open(BASE_DATE_FILE, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        pass
-    
-    return firebase_success
+    """儲存基準日期"""
+    return data_manager.save_data('base_date', base_date)
 
 def reset_base_date():
     """重置基準日期"""
     global base_date
     base_date = None
-    
-    # 從 Firebase 刪除
-    if firebase_service.firebase_service_instance.is_available():
-        firebase_service.firebase_service_instance.reset_base_date()
-    
-    # 從本地檔案刪除
-    try:
-        if os.path.exists(BASE_DATE_FILE):
-            os.remove(BASE_DATE_FILE)
-    except Exception as e:
-        pass
+    return data_manager.delete_data('base_date')
 
 def load_group_schedules():
-    """從 Firebase 或本地檔案載入群組推播排程設定"""
-    # 優先嘗試從 Firebase 載入
-    if firebase_service.firebase_service_instance.is_available():
-        firebase_schedules = firebase_service.firebase_service_instance.load_group_schedules()
-        if firebase_schedules:
-            return firebase_schedules
-    
-    # Firebase 不可用時，回退到本地檔案
-    try:
-        if os.path.exists(GROUP_SCHEDULES_FILE):
-            with open(GROUP_SCHEDULES_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        return {}
-    except Exception as e:
-        print(f"載入群組排程設定失敗: {e}")
-        return {}
+    """載入群組排程設定"""
+    return data_manager.load_data('group_schedules', {})
 
 def save_group_schedules(schedules):
-    """儲存群組推播排程設定到 Firebase 和本地檔案"""
-    # 儲存到 Firebase
-    firebase_success = False
-    if firebase_service.firebase_service_instance.is_available():
-        firebase_success = firebase_service.firebase_service_instance.save_group_schedules(schedules)
-    
-    # 同時保存到本地檔案作為備份
-    try:
-        with open(GROUP_SCHEDULES_FILE, 'w', encoding='utf-8') as f:
-            json.dump(schedules, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        print(f"儲存群組排程設定失敗: {e}")
-        return False
-    
+    """儲存群組排程設定"""
+    result = data_manager.save_data('group_schedules', schedules)
     # 排程變更時自動備份
     auto_backup()
+    return result
+
+
+
+
     return firebase_success
 # ===== LINE Bot 設定 =====
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
@@ -487,7 +431,8 @@ def auto_backup():
         backup_sources = []
         if firebase_backup:
             backup_sources.append("Firebase")
-        backup_sources.append("本地")
+        if encoded_data:  # 環境變數備份
+            backup_sources.append("環境變數")
         
         print(f"🔄 自動備份完成 ({timestamp}) - {len(encoded_data)} 字符 - 備份到: {', '.join(backup_sources)}")
         
@@ -592,37 +537,7 @@ if not restore_from_env_backup():
     
     # 檢查是否需要從本地檔案遷移到 Firebase
     if firebase_service.firebase_service_instance.is_available():
-        print("✅ Firebase 可用，檢查是否需要遷移本地資料")
-        
-        # 收集本地檔案資料
-        local_data = {}
-        try:
-            if os.path.exists(GROUP_IDS_FILE):
-                with open(GROUP_IDS_FILE, 'r', encoding='utf-8') as f:
-                    local_data['group_ids'] = json.load(f)
-            
-            if os.path.exists(GROUPS_FILE):
-                with open(GROUPS_FILE, 'r', encoding='utf-8') as f:
-                    local_data['groups'] = json.load(f)
-            
-            if os.path.exists(BASE_DATE_FILE):
-                with open(BASE_DATE_FILE, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    local_data['base_date'] = data["base_date"]
-            
-            if os.path.exists(GROUP_SCHEDULES_FILE):
-                with open(GROUP_SCHEDULES_FILE, 'r', encoding='utf-8') as f:
-                    local_data['group_schedules'] = json.load(f)
-        except Exception as e:
-            print(f"⚠️ 讀取本地檔案失敗: {e}")
-        
-        # 如果有本地資料，嘗試遷移到 Firebase
-        if local_data:
-            print(f"📁 發現本地資料，準備遷移到 Firebase...")
-            if firebase_service.firebase_service_instance.migrate_from_local_files(local_data):
-                print("✅ 本地資料已成功遷移到 Firebase")
-            else:
-                print("⚠️ 部分資料遷移失敗，將繼續使用混合模式")
+        print("✅ Firebase 可用，直接從 Firebase 載入資料")
     
     # 載入群組排程設定
     group_schedules = load_group_schedules()
