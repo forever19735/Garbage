@@ -2,6 +2,8 @@
 
 智能群組輪值管理系統，支援 **每個群組獨立設定** 的 LINE Bot。自動推播提醒、彈性排程設定、多群組分別管理。
 
+✨ **Firebase 純雲端架構 - 企業級可靠性，無需複雜設定**
+
 ## ✨ 核心功能
 
 ### 🏢 多群組獨立管理
@@ -30,23 +32,33 @@
 - **使用說明**：內建完整的幫助系統
 - **簡化指令**：使用直觀的短指令（@time, @day, @week）
 
-## 🚀 快速開始
+### 🚀 快速開始
 
-### 1. 部署到 Railway
+### 1. Firebase 設定（一次性設定）
+
+1. 前往 [Firebase Console](https://console.firebase.google.com/)
+2. 建立新專案或選擇現有專案
+3. 啟用 **Firestore Database**
+4. 在專案設定中建立 **服務帳戶金鑰**
+5. 下載 JSON 憑證檔案，複製完整內容
+
+### 2. 部署到 Railway
 
 1. 到 [Railway](https://railway.app) 建立新專案
-2. 連結你的 GitHub 專案（上傳此資料夾）
+2. 連結你的 GitHub 專案（上傳此資料夾）  
 3. 在 Railway 中設定環境變數：
 
 | 變數名稱 | 說明 | 必要性 |
 |-----------|------|--------|
 | `LINE_CHANNEL_ACCESS_TOKEN` | 從 LINE Developers 取得 | ✅ 必要 |
 | `LINE_CHANNEL_SECRET` | 從 LINE Developers 取得 | ✅ 必要 |
-| `LINE_GROUP_ID` | 群組 ID（Bot 會自動管理） | ⚪ 可選 |
+| `FIREBASE_CONFIG_JSON` | Firebase 服務帳戶完整 JSON | ✅ 必要 |
+
+💡 **只需要 3 個環境變數，設定超簡單！**
 
 4. 部署完成後，將 Railway 提供的 URL 設定為 LINE Developers 的 Webhook URL
 
-### 2. LINE Developers 設定
+### 3. LINE Developers 設定
 
 1. 前往 [LINE Developers Console](https://developers.line.biz/)
 2. 建立新的 Provider 和 Messaging API Channel
@@ -54,7 +66,7 @@
 4. 在 Webhook settings 中設定你的 Railway URL
 5. 將 Bot 加入到目標 LINE 群組
 
-### 3. 初始設定（在 LINE 群組中）
+### 4. 初始設定（在 LINE 群組中）
 
 ```
 @time 18:00                  # 設定本群組推播時間  
@@ -87,14 +99,18 @@
 
 ### 🔄 重置功能
 - `@reset_date` - 重置基準日期為今天
-- `@backup` - 手動創建數據備份（用於部署環境）
-- `@latest_backup` - 查看最新自動備份內容
+- `@backup` - 查看 Firebase 備份狀態
+
+### ☁️ Firebase 雲端功能
+- `@firebase` - 查看 Firebase 連接狀態
+- `@debug_env` - 環境變數診斷
 
 ### 🤖 自動備份功能
-- **數據變更自動備份**：設定成員、排程時自動備份
-- **定期自動備份**：每天凌晨 02:00 自動備份
-- **啟動時自動備份**：系統啟動時自動備份一次
-- **備份檔案**：latest_backup.txt 儲存最新備份資料
+- **Firebase 雲端備份**：資料安全存儲在 Google Firebase
+- **自動版本控制**：Firebase 內建備份和恢復機制
+- **即時同步**：多環境資料自動同步
+- **企業級可靠性**：99.99% 的可用性保證
+- **無需手動設定**：完全自動化的雲端存儲
 
 ### ❓ 幫助系統
 - `@help` - 顯示完整指令列表
@@ -144,38 +160,52 @@
 - **Flask** - Web 框架
 - **LINE Bot SDK v3** - LINE 訊息處理
 - **APScheduler** - 背景排程任務（支援多群組排程）
+- **Firebase Firestore** - 雲端資料庫存儲
 - **pytz** - 時區處理
 
 ### 特色設計
+- **Firebase 純雲端**：所有資料存儲在 Google Firebase
 - **群組隔離儲存**：每個群組的資料完全分離
 - **獨立排程管理**：每個群組有自己的推播任務
 - **自然週算法**：基於週一為起始的真實週期計算
 - **容錯設計**：完整的例外處理和錯誤提示
 - **模組化結構**：清晰的功能分離和程式架構
 
+### 雲端架構優勢
+- **無單點故障**：Firebase 分散式架構
+- **自動擴展**：隨使用量自動調整
+- **全球同步**：多地區資料中心
+- **即時備份**：自動版本控制和恢復
+- **零維護**：無需管理資料庫或伺服器
+
 ### 資料結構
 ```json
 {
-  "groups.json": {
-    "C群組ID1": {
-      "1": ["Alice", "Bob"],
-      "2": ["Charlie"]
+  "Firebase Firestore 集合": {
+    "bot_config/groups": {
+      "C群組ID1": {
+        "1": ["Alice", "Bob"],
+        "2": ["Charlie"]
+      },
+      "C群組ID2": {
+        "1": ["David", "Eve"],
+        "2": ["Frank"]
+      }
     },
-    "C群組ID2": {
-      "1": ["David", "Eve"],
-      "2": ["Frank"]
-    }
-  },
-  "group_schedules.json": {
-    "C群組ID1": {
-      "days": "mon,wed,fri",
-      "hour": 17,
-      "minute": 0
+    "bot_config/group_schedules": {
+      "C群組ID1": {
+        "days": "mon,wed,fri",
+        "hour": 17,
+        "minute": 0
+      },
+      "C群組ID2": {
+        "days": "tue,thu",
+        "hour": 9,
+        "minute": 30
+      }
     },
-    "C群組ID2": {
-      "days": "tue,thu",
-      "hour": 9,
-      "minute": 30
+    "backups/": {
+      "[timestamp]": "自動備份記錄"
     }
   }
 }
@@ -211,6 +241,7 @@ pip install -r requirements.txt
 # 3. 設定環境變數（建立 .env 檔案）
 echo "LINE_CHANNEL_ACCESS_TOKEN=你的_access_token" > .env
 echo "LINE_CHANNEL_SECRET=你的_channel_secret" >> .env
+echo "FIREBASE_CONFIG_JSON=你的_firebase_config_json" >> .env
 
 # 4. 執行應用
 python main.py
@@ -218,6 +249,13 @@ python main.py
 
 ### 測試功能
 ```python
+# 測試 Firebase 連接
+from firebase_service import firebase_service_instance
+
+# 檢查 Firebase 狀態
+status = firebase_service_instance.is_available()
+print(f"Firebase 連接狀態: {status}")
+
 # 測試群組獨立功能
 from main import get_current_group, update_schedule
 
@@ -239,83 +277,118 @@ print(f"排程設定結果: {result}")
 - 新增功能請包含適當的註解
 - 重要變更請更新 README
 
-## 💾 數據持久化
+## ☁️ Firebase 雲端存儲
 
-### 部署環境數據保留
-為了避免在雲端平台（如 Railway、Heroku）部署更新時遺失設定，本系統提供完整的自動備份功能：
+### 🔥 Firebase 優勢
+本系統採用 Google Firebase Firestore 作為雲端資料庫，提供：
 
-#### 🤖 自動備份功能
-系統具備多層次的自動備份機制：
+#### 🚀 企業級可靠性
+- **99.99% 可用性**：Google 全球基礎設施
+- **自動備份**：即時版本控制和災難恢復
+- **多地區同步**：全球資料中心分散式存儲
+- **零單點故障**：分散式架構設計
 
-**1. 數據變更自動備份**
-- 設定成員時自動備份（@week, @addmember, @removemember）
-- 設定排程時自動備份（@time, @day, @cron）
-- 確保每次重要變更都有最新備份
+#### ⚡ 開發者友善
+- **即時同步**：資料變更立即生效
+- **無需維護**：Google 負責所有基礎設施
+- **自動擴展**：隨使用量自動調整效能
+- **簡單設定**：只需一個 JSON 憑證檔案
 
-**2. 定期自動備份**
-- 每天凌晨 02:00 自動執行完整備份
-- 無需手動操作，全自動運行
-- 將備份資料保存到 `latest_backup.txt`
+#### 🔒 安全性保障
+- **加密傳輸**：HTTPS/TLS 加密
+- **存取控制**：Firebase 安全規則
+- **身分驗證**：服務帳戶金鑰驗證
+- **審計日誌**：完整的操作記錄
 
-**3. 啟動時自動備份**
-- 系統啟動時自動備份當前狀態
-- 為即將到來的操作提供保護
+### 📋 Firebase 設定步驟
 
-#### 📋 手動備份指令
-除了自動備份，也可手動執行：
+#### 1. 建立 Firebase 專案
+1. 前往 [Firebase Console](https://console.firebase.google.com/)
+2. 點擊「建立專案」或選擇現有專案
+3. 按照指示完成專案設定
 
+#### 2. 啟用 Firestore Database
+1. 在 Firebase 控制台選擇「Firestore Database」
+2. 點擊「建立資料庫」
+3. 選擇「測試模式」（之後可調整安全規則）
+4. 選擇資料庫位置（建議選擇亞洲地區）
+
+#### 3. 建立服務帳戶
+1. 前往「專案設定」→「服務帳戶」
+2. 點擊「產生新的私密金鑰」
+3. 下載 JSON 檔案
+4. 複製 JSON 檔案的完整內容
+
+#### 4. 設定環境變數
+將 JSON 內容設定為 `FIREBASE_CONFIG_JSON` 環境變數：
+
+**Railway 設定：**
 ```
-@backup          # 手動創建完整備份
-@latest_backup   # 查看最新自動備份內容
-```
-
-#### ⚙️ 設定環境變數
-將備份資料設定到部署平台：
-
-**自動備份檔案方式：**
-1. 查看 `latest_backup.txt` 檔案內容
-2. 複製完整的備份字串
-
-**手動備份指令方式：**
-1. 執行 `@backup` 指令
-2. 複製產生的備份資料
-
-**設定環境變數：**
-- 環境變數名稱：`GARBAGE_BOT_PERSISTENT_DATA`
-- 環境變數值：備份產生的完整字串
-
-**Railway 設定方式：**
-1. 進入專案設定 → Variables
-2. 新增環境變數 `GARBAGE_BOT_PERSISTENT_DATA`
-3. 貼上備份資料
-
-**Heroku 設定方式：**
-```bash
-heroku config:set GARBAGE_BOT_PERSISTENT_DATA="備份資料"
+FIREBASE_CONFIG_JSON={"type": "service_account", "project_id": "your-project", ...}
 ```
 
-#### 🔄 自動恢復
-系統啟動時會自動檢查環境變數備份：
-- ✅ **有備份**：自動恢復所有設定
-- ⚠️ **無備份**：使用本地檔案（可能在部署時遺失）
+**本地開發 (.env)：**
+```
+FIREBASE_CONFIG_JSON={"type": "service_account", "project_id": "your-project", ...}
+```
 
-#### 💡 備份優勢
-**自動化程度高：**
-- 無需記住手動備份
-- 數據變更即時保護
-- 定期備份雙重保障
+### 🔍 Firebase 監控指令
 
-**便利性強：**
-- 一個環境變數包含所有資料
-- 備份資料自動壓縮
-- 支援完整數據恢復
+#### 檢查連接狀態
+```
+@firebase           # 查看 Firebase 連接和統計資訊
+@debug_env          # 診斷環境變數設定
+```
 
-**可靠性佳：**
-- 多層次備份機制
-- 啟動時自動恢復
-- 容錯設計完善
+#### 備份功能
+```
+@backup             # 查看 Firebase 備份狀態  
+```
 
-> 💡 **建議**：定期檢查 `@latest_backup` 確認備份狀態，重要變更後可手動執行 `@backup` 立即更新環境變數
+### 💡 Firebase 最佳實踐
+
+#### 資料結構設計
+- **集合隔離**：不同類型資料存在不同集合
+- **文件 ID 規範**：使用有意義的 ID 命名
+- **巢狀資料**：合理使用子集合和巢狀物件
+
+#### 安全規則建議
+```javascript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /bot_config/{document} {
+      allow read, write: if true; // 開發階段，生產環境應加強限制
+    }
+    match /backups/{document} {
+      allow read, write: if true;
+    }
+  }
+}
+```
+
+#### 效能優化
+- **批次操作**：使用 batch 寫入減少請求次數
+- **索引建立**：為查詢欄位建立適當索引
+- **快取策略**：適當使用本地快取減少讀取
+
+### � 疑難排解
+
+#### 常見問題
+**Q: Firebase 連接失敗？**
+A: 檢查 `FIREBASE_CONFIG_JSON` 格式是否正確，確保 JSON 完整無誤
+
+**Q: 權限被拒絕？**
+A: 確認 Firestore 安全規則允許讀寫操作
+
+**Q: 資料未同步？**
+A: 檢查網路連接，Firebase 需要穩定的網路環境
+
+#### 除錯工具
+```
+@debug_env          # 檢查環境變數設定
+@firebase           # 查看 Firebase 狀態和統計
+```
 
 ### 問題回報
 請在 Issue 中包含：
@@ -328,10 +401,18 @@ heroku config:set GARBAGE_BOT_PERSISTENT_DATA="備份資料"
 
 MIT License - 詳見 LICENSE 檔案
 
-## 🔗 相關連結
+## 🔗 相關文件
+
+- 📚 `FIREBASE_SETUP_GUIDE.md` - **Firebase 完整設定指南**（推薦新手）
+- 🔧 `FIREBASE_SETUP.md` - Firebase 詳細設定說明
+- 🏗️ `AI_輔助案例_多群組LINE_Bot架構重構.md` - 架構重構案例
+- 📊 `儲存策略分析.md` - 資料儲存策略分析
+
+## 🌐 外部連結
 
 - [LINE Developers](https://developers.line.biz/)
 - [Railway 部署平台](https://railway.app)
+- [Firebase Console](https://console.firebase.google.com/)
 - [Flask 官方文件](https://flask.palletsprojects.com/)
 - [APScheduler 文件](https://apscheduler.readthedocs.io/)
 
@@ -339,4 +420,4 @@ MIT License - 詳見 LICENSE 檔案
 
 ⭐ 如果這個專案對你有幫助，請給個 Star！
 
-🎯 **特色功能：真正的多群組獨立管理，每個群組都有自己的輪值表和推播時間！**
+🎯 **特色功能：真正的多群組獨立管理 + Firebase 企業級雲端存儲！**

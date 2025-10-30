@@ -148,108 +148,33 @@ LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
 group_ids = load_group_ids()
 groups = load_groups()  # 儲存每週的成員名單
 base_date = load_base_date()  # 儲存基準日期（第一週開始日期）
-
-# 群組推播排程設定檔案
-GROUP_SCHEDULES_FILE = 'group_schedules.json'
-
-# ===== 環境變數持久化功能 =====
-PERSISTENT_DATA_KEY = "GARBAGE_BOT_PERSISTENT_DATA"
-
-def load_from_env_backup():
-    """從環境變數載入備份數據"""
-    try:
-        backup_data = os.environ.get(PERSISTENT_DATA_KEY)
-        if backup_data:
-            import base64
-            import gzip
-            
-            # 解碼壓縮的數據
-            compressed_data = base64.b64decode(backup_data.encode())
-            json_data = gzip.decompress(compressed_data).decode('utf-8')
-            data = json.loads(json_data)
-            
-            print("✅ 從環境變數恢復數據")
-            return data
-    except Exception as e:
-        print(f"⚠️ 環境變數恢復失敗: {e}")
-    return None
-
-def save_to_env_backup():
-    """將當前數據保存到環境變數（用於手動備份）"""
-    try:
-        # 收集當前內存中的數據（而不是重新從檔案載入）
-        all_data = {
-            "group_ids": list(group_ids),  # 使用當前內存中的數據
-            "groups": dict(groups),        # 使用當前內存中的數據
-            "base_date": base_date.isoformat() if base_date else None,  # 序列化日期
-            "group_schedules": dict(group_schedules)  # 使用當前內存中的數據
-        }
-        
-        import base64
-        import gzip
-        
-        # 壓縮數據
-        json_data = json.dumps(all_data, ensure_ascii=False)
-        compressed_data = gzip.compress(json_data.encode('utf-8'))
-        encoded_data = base64.b64encode(compressed_data).decode()
-        
-        print(f"📊 備份數據大小: {len(encoded_data)} 字符")
-        print("💡 請將以下數據設定為環境變數 GARBAGE_BOT_PERSISTENT_DATA:")
-        print(f"```\n{encoded_data}\n```")
-        
-        return encoded_data
-    except Exception as e:
-        print(f"❌ 數據備份失敗: {e}")
-        return None
+group_schedules = load_group_schedules()  # 載入群組排程設定
 
 def auto_backup():
-    """自動備份功能 - 靜默執行，不輸出詳細資訊"""
+    """自動備份功能 - 只備份到 Firebase"""
     try:
-        # 收集當前內存中的數據
-        all_data = {
-            "group_ids": list(group_ids),
-            "groups": dict(groups),
-            "base_date": base_date.isoformat() if base_date else None,  # 序列化日期
-            "group_schedules": dict(group_schedules)
-        }
-        
         # 創建 Firebase 備份
         firebase_backup = None
         if firebase_service.firebase_service_instance.is_available():
             firebase_backup = firebase_service.firebase_service_instance.create_backup()
         
-        import base64
-        import gzip
-        
-        # 壓縮數據
-        json_data = json.dumps(all_data, ensure_ascii=False)
-        compressed_data = gzip.compress(json_data.encode('utf-8'))
-        encoded_data = base64.b64encode(compressed_data).decode()
-        
-        # 將備份存到一個特殊的檔案中作為最近備份
-        with open('latest_backup.txt', 'w', encoding='utf-8') as f:
-            f.write(encoded_data)
-        
         from datetime import datetime
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
-        backup_sources = []
         if firebase_backup:
-            backup_sources.append("Firebase")
-        if encoded_data:  # 環境變數備份
-            backup_sources.append("環境變數")
-        
-        print(f"🔄 自動備份完成 ({timestamp}) - {len(encoded_data)} 字符 - 備份到: {', '.join(backup_sources)}")
-        
-        return encoded_data
+            print(f"🔄 自動備份完成 ({timestamp}) - 備份到: Firebase")
+            return True
+        else:
+            print(f"⚠️ 自動備份失敗 ({timestamp}) - Firebase 不可用")
+            return False
     except Exception as e:
         print(f"⚠️ 自動備份失敗: {e}")
-        return None
+        return False
 
 def trigger_auto_backup():
-    """觸發自動備份並通知用戶如何設定"""
-    backup_data = auto_backup()
-    if backup_data and LINE_CHANNEL_ACCESS_TOKEN:
+    """觸發自動備份並通知用戶"""
+    backup_success = auto_backup()
+    if backup_success and LINE_CHANNEL_ACCESS_TOKEN:
         # 如果有設定的群組，發送備份提醒到第一個群組
         if group_ids:
             try:
@@ -259,17 +184,13 @@ def trigger_auto_backup():
                     'Content-Type': 'application/json'
                 }
                 
-                message = f"""📱 自動備份提醒
+                message = """📱 自動備份提醒
 
-✅ 數據已自動備份完成
-💾 備份大小: {len(backup_data)} 字符
+✅ 數據已自動備份到 Firebase
+☁️ 您的資料安全存儲在雲端
 
-🔧 如需在部署時保持設定，請：
-1. 複製檔案 latest_backup.txt 的內容
-2. 在部署平台設定環境變數：
-   GARBAGE_BOT_PERSISTENT_DATA=備份內容
-
-⚡ 或使用 @backup 指令查看完整備份資料"""
+🔧 所有設定都已同步，無需手動操作
+⚡ 使用 @backup 指令查看備份狀態"""
 
                 data = {
                     'to': group_ids[0],  # 發送到第一個群組
@@ -285,64 +206,14 @@ def trigger_auto_backup():
             except Exception as e:
                 print(f"⚠️ 發送自動備份提醒失敗: {e}")
         
-    return backup_data
+    return backup_success
 
-def restore_from_env_backup():
-    """在啟動時嘗試從環境變數恢復數據"""
-    backup_data = load_from_env_backup()
-    if backup_data:
-        try:
-            # 恢復群組 ID
-            if backup_data.get("group_ids"):
-                global group_ids
-                group_ids.clear()
-                group_ids.extend(backup_data["group_ids"])
-                save_group_ids()
-                print(f"✅ 恢復群組 ID: {len(group_ids)} 個")
-            
-            # 恢復成員數據，修正 JSON 序列化的數字鍵問題
-            if backup_data.get("groups"):
-                global groups
-                groups.clear()
-                for group_id, weeks in backup_data["groups"].items():
-                    # 修正週數鍵從字串轉回數字
-                    groups[group_id] = {int(week): members for week, members in weeks.items()}
-                save_groups()
-                print(f"✅ 恢復成員數據: {len(groups)} 個群組")
-            
-            # 恢復基準日期
-            if backup_data.get("base_date"):
-                global base_date
-                from datetime import datetime
-                base_date = datetime.fromisoformat(backup_data["base_date"]).date()
-                save_base_date(base_date)
-                print(f"✅ 恢復基準日期: {base_date}")
-            
-            # 恢復排程設定
-            if backup_data.get("group_schedules"):
-                global group_schedules
-                group_schedules.clear()
-                group_schedules.update(backup_data["group_schedules"])
-                save_group_schedules(group_schedules)  # 傳遞參數
-                print(f"✅ 恢復排程設定: {len(group_schedules)} 個群組")
-                
-            return True
-        except Exception as e:
-            print(f"❌ 數據恢復失敗: {e}")
-    return False
+# 載入數據 - 直接從 Firebase 載入
+if firebase_service.firebase_service_instance.is_available():
+    print("✅ Firebase 可用，直接從 Firebase 載入資料")
 
-# 載入數據，優先從 Firebase 載入，如果失敗則從環境變數恢復
-if not restore_from_env_backup():
-    print("⚠️ 未找到環境變數備份，嘗試載入本地檔案")
-    
-    # 檢查是否需要從本地檔案遷移到 Firebase
-    if firebase_service.firebase_service_instance.is_available():
-        print("✅ Firebase 可用，直接從 Firebase 載入資料")
-    
-    # 載入群組排程設定
-    group_schedules = load_group_schedules()
-else:
-    print("✅ 已從環境變數恢復所有數據")
+# 載入群組排程設定
+group_schedules = load_group_schedules()
 
 # 從環境變數載入已知的群組 ID（補充載入，支援舊版設定）
 if os.getenv("LINE_GROUP_ID"):
@@ -1212,7 +1083,7 @@ mon, tue, wed, thu, fri, sat, sun
 🔄 重置功能：
 @reset_all - 重置所有資料 (成員+群組+基準日期)
 @reset_date - 重置基準日期為今天
-@backup - 創建數據備份 (部署時保持設定)
+@backup - Firebase 備份狀態查詢
 ⚠️ 此操作無法復原，請謹慎使用
 
 � 自動化功能：
@@ -2144,25 +2015,35 @@ def handle_message(event):
             )
             messaging_api.reply_message(req)
         
-        # 創建數據備份 - 產生環境變數備份資料
+        # Firebase 備份狀態查詢
         if event.message.text.strip() == "@backup":
             try:
-                # 創建當前數據的備份
-                backup_data = save_to_env_backup()
+                # 檢查 Firebase 連接狀態
+                firebase_available = firebase_service.firebase_service_instance.is_available()
                 
-                if backup_data:
-                    response_text = f"""✅ 數據備份已創建！
+                if firebase_available:
+                    # 創建 Firebase 備份
+                    backup_result = firebase_service.firebase_service_instance.create_backup()
+                    
+                    if backup_result:
+                        response_text = """✅ 資料備份已完成！
 
-📋 請在部署平台設定以下環境變數：
+☁️ 備份位置: Firebase Firestore
+🔒 資料安全: 雲端自動保護
+📊 備份內容: 群組設定、成員資料、排程設定
 
-環境變數名稱: GARBAGE_BOT_PERSISTENT_DATA
-環境變數值: {backup_data[:100]}...
+� 備份優勢:
+• 自動版本控制
+• 即時同步
+• 無需手動設定
+• 企業級可靠性
 
-⚠️ 備份資料很長，請複製完整內容
-💾 完整備份資料請查看系統日誌
-🔄 下次部署時會自動恢復所有設定"""
+🔄 系統每天 02:00 自動備份
+⚡ 資料變更時也會自動備份"""
+                    else:
+                        response_text = "⚠️ Firebase 備份建立失敗，請稍後再試"
                 else:
-                    response_text = "❌ 備份創建失敗，請檢查系統狀態"
+                    response_text = "❌ Firebase 無法連接，備份功能暫時不可用"
                 
             except Exception as e:
                 response_text = f"❌ 備份失敗: {str(e)}"
@@ -2231,43 +2112,6 @@ def handle_message(event):
 ⚙️ 系統資訊：
 • Python: {sys.version.split()[0]}
 • 時間: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"""
-            
-            from linebot.v3.messaging.models import ReplyMessageRequest
-            req = ReplyMessageRequest(
-                reply_token=event.reply_token,
-                messages=[TextMessage(text=response_text)]
-            )
-            messaging_api.reply_message(req)
-        
-        # 查看最新自動備份
-        if event.message.text.strip() == "@latest_backup":
-            try:
-                if os.path.exists('latest_backup.txt'):
-                    with open('latest_backup.txt', 'r', encoding='utf-8') as f:
-                        backup_data = f.read().strip()
-                    
-                    from datetime import datetime
-                    # 取得檔案修改時間
-                    backup_time = datetime.fromtimestamp(os.path.getmtime('latest_backup.txt'))
-                    
-                    response_text = f"""📱 最新自動備份資料
-
-🕐 備份時間: {backup_time.strftime('%Y-%m-%d %H:%M:%S')}
-📦 備份大小: {len(backup_data)} 字符
-
-💾 環境變數設定：
-GARBAGE_BOT_PERSISTENT_DATA={backup_data[:100]}...
-
-💡 完整備份內容：
-{backup_data[:200]}...
-
-⚡ 提示：系統每天 02:00 自動備份
-🔄 數據變更時也會自動備份"""
-                else:
-                    response_text = "❌ 尚未產生自動備份檔案\n請等待系統自動備份或手動執行 @backup"
-                    
-            except Exception as e:
-                response_text = f"❌ 讀取備份失敗: {str(e)}"
             
             from linebot.v3.messaging.models import ReplyMessageRequest
             req = ReplyMessageRequest(
