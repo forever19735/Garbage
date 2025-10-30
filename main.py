@@ -988,18 +988,11 @@ mon, tue, wed, thu, fri, sat, sun
     elif category == "groups":
         return """📱 群組管理指令
 
-🔍 查看群組：
-@groups - 顯示已設定的群組列表
-@info - 顯示詳細群組資訊
-
 ⚙️ 管理群組：
 💡 將 Bot 加入群組會自動記錄群組 ID
 💡 在想要接收提醒的群組中輸入此指令
 
-�️ 清空功能：
-@clear_groups - 清空所有群組 ID
-
-�📊 群組資訊說明：
+📊 群組資訊說明：
 - Bot 加入群組時會自動記錄
 - 支援多個群組同時接收提醒
 - 群組 ID 以 'C' 開頭"""
@@ -1008,88 +1001,35 @@ mon, tue, wed, thu, fri, sat, sun
         return """🧪 查看和調試指令
 
 📊 查看資訊：
-@status - 完整系統狀態摘要
 @schedule - 排程資訊
 @members - 成員輪值表
-@groups - 群組列表
-@info - 詳細群組資訊
 
 🆘 獲取幫助：
 @help - 顯示所有指令
 @help 類別 - 顯示特定類別指令
 類別：schedule, members, groups"""
 
-    elif category == "manage":
-        return """🔧 管理和重置指令
-
-🗑️ 清空功能：
-@clear_week 週數 - 清空指定週的成員
-範例：@clear_week 1
-
-@clear_members - 清空所有週的成員安排
-@clear_groups - 清空所有群組 ID
-
-🔄 重置功能：
-@reset_all - 重置所有資料 (成員+群組+基準日期)
-@reset_date - 重置基準日期為今天
-@backup - Firebase 備份狀態查詢
-⚠️ 此操作無法復原，請謹慎使用
-
-� 自動化功能：
-設定後會在資料變更時自動同步到 Railway
-
-�📊 系統管理：
-@status - 查看完整系統狀態
-包含：成員輪值狀態、群組狀態、排程狀態、基準日期
-
-� 數據備份：
-@backup - 產生環境變數備份資料
-適用於雲端部署平台 (Railway、Heroku)
-防止更新時遺失所有設定
-
-�💡 管理建議：
-- 使用 @status 確認操作前的狀態
-- 定期執行 @backup 備份重要資料
-- 漸進式清空：先清空特定週，再考慮全部清空
-- 重要資料請先記錄再執行重置
-- 清空操作會立即生效並持久化
-- 基準日期影響週數計算，請謹慎重置"""
-
     else:  # 顯示所有指令概覽
         return """🤖 垃圾收集提醒 Bot 指令大全
 
-📋 分類查看：
-@help schedule - 排程管理指令 (設定提醒時間)
-@help members - 成員管理指令 (輪值安排)
-@help groups - 群組管理指令 (LINE 群組設定)
-
-🔥 常用指令：
+ 常用指令：
 @schedule - 查看推播排程
 @members - 查看成員輪值表
-@groups - 查看群組設定
-@status - 查看系統狀態
 
-⚙️ 快速設定：
+⚙️ 排程設定：
 @time 18:30 - 設定推播時間
-@day mon,thu - 設定推播星期
+@day mon,thu - 設定推播星期  
 @cron mon,thu 18 30 - 同時設定星期和時間
-@week 1 Alice,Bob - 設定第1週成員
 
 👥 成員管理：
+@week 1 Alice,Bob - 設定第1週成員
 @addmember 1 Charlie - 添加成員到第1週
 @removemember 1 Alice - 從第1週移除成員
-@clear_week 1 - 清空第1週成員
-@clear_members - 清空所有成員
 
-📱 群組管理：
-@info - 顯示詳細群組資訊
-@clear_groups - 清空所有群組 ID
-
-🔄 管理功能：
-@status - 查看完整系統狀態
-@reset_all - 重置所有資料 (含排程設定，謹慎使用)
-@reset_date - 重置基準日期為今天
-@debug_env - 環境變數詳細診斷
+📋 詳細查看：
+@help schedule - 排程管理指令說明
+@help members - 成員管理指令說明  
+@help groups - 群組管理指令說明
 
 💡 使用提示：
 - 所有時間都是台北時間
@@ -1100,14 +1040,12 @@ mon, tue, wed, thu, fri, sat, sun
 - 第一次設定成員時會自動記錄基準日期
 - 週數按自然週循環，每個星期一自動切換
 
-❓ 需要詳細說明請輸入：
-@help 類別名稱
-
 🏃‍♂️ 新手快速開始：
 1. 將 Bot 加入群組 (自動記錄群組)
 2. 輸入 @time 18:00 (設定提醒時間)
 3. 輸入 @week 1 姓名1,姓名2 (設定成員)
-4. 輸入 @status (查看設定狀態)"""
+
+❓ 需要詳細說明請輸入：@help 類別名稱"""
 
 def get_command_examples():
     """
@@ -1122,7 +1060,6 @@ def get_command_examples():
 1. 將 Bot 加入群組 - 自動記錄群組 ID
 2. @time 18:00 - 設定晚上6點推播
 3. @week 1 Alice,Bob - 設定第1週成員
-4. @status - 查看設定狀態
 
 ⏰ 排程設定範例：
 @time 07:30 - 早上7:30提醒
@@ -1144,8 +1081,6 @@ def get_command_examples():
 🧪 驗證流程：
 @members - 查看輪值安排
 @schedule - 確認推播時間  
-@status - 查看系統狀態
-@groups - 確認群組設定
 
 💡 實用技巧：
 - 用表情符號標記成員：@week 1 Alice🌟,Bob🔥
@@ -1809,48 +1744,48 @@ def handle_message(event):
                 )
                 messaging_api.reply_message(req)
 
-        # 顯示目前已設定的群組列表
-        if event.message.text.strip() == "@groups":
-            if group_ids:
-                group_list = "\n".join([f"{i+1}. {gid}" for i, gid in enumerate(group_ids)])
-                response_text = f"📋 目前已設定的群組 ({len(group_ids)} 個):\n{group_list}"
-            else:
-                response_text = "❌ 尚未設定任何群組 ID\n請將 Bot 加入群組，系統會自動記錄群組 ID"
-            
-            from linebot.v3.messaging.models import ReplyMessageRequest
-            req = ReplyMessageRequest(
-                reply_token=event.reply_token,
-                messages=[TextMessage(text=response_text)]
-            )
-            messaging_api.reply_message(req)
+        # # 顯示目前已設定的群組列表
+        # if event.message.text.strip() == "@groups":
+        #     if group_ids:
+        #         group_list = "\n".join([f"{i+1}. {gid}" for i, gid in enumerate(group_ids)])
+        #         response_text = f"📋 目前已設定的群組 ({len(group_ids)} 個):\n{group_list}"
+        #     else:
+        #         response_text = "❌ 尚未設定任何群組 ID\n請將 Bot 加入群組，系統會自動記錄群組 ID"
+        #     
+        #     from linebot.v3.messaging.models import ReplyMessageRequest
+        #     req = ReplyMessageRequest(
+        #         reply_token=event.reply_token,
+        #         messages=[TextMessage(text=response_text)]
+        #     )
+        #     messaging_api.reply_message(req)
         
-        # 顯示詳細的群組 ID 資訊
-        if event.message.text.strip() == "@info":
-            group_info = get_line_group_ids()
-            
-            if group_info["is_configured"]:
-                valid_count = len(group_info["valid_ids"])
-                invalid_count = group_info["count"] - valid_count
-                
-                response_text = f"📊 群組 ID 詳細資訊：\n\n"
-                response_text += f"總群組數：{group_info['count']}\n"
-                response_text += f"有效群組：{valid_count}\n"
-                if invalid_count > 0:
-                    response_text += f"無效群組：{invalid_count}\n"
-                
-                response_text += f"\n📋 群組列表：\n"
-                for i, gid in enumerate(group_info["group_ids"], 1):
-                    status = "✅" if gid in group_info["valid_ids"] else "❌"
-                    response_text += f"{i}. {status} {gid}\n"
-            else:
-                response_text = "❌ 尚未設定任何群組 ID\n請將 Bot 加入群組，系統會自動記錄群組 ID"
-            
-            from linebot.v3.messaging.models import ReplyMessageRequest
-            req = ReplyMessageRequest(
-                reply_token=event.reply_token,
-                messages=[TextMessage(text=response_text)]
-            )
-            messaging_api.reply_message(req)
+        # # 顯示詳細的群組 ID 資訊
+        # if event.message.text.strip() == "@info":
+        #     group_info = get_line_group_ids()
+        #     
+        #     if group_info["is_configured"]:
+        #         valid_count = len(group_info["valid_ids"])
+        #         invalid_count = group_info["count"] - valid_count
+        #         
+        #         response_text = f"📊 群組 ID 詳細資訊：\n\n"
+        #         response_text += f"總群組數：{group_info['count']}\n"
+        #         response_text += f"有效群組：{valid_count}\n"
+        #         if invalid_count > 0:
+        #             response_text += f"無效群組：{invalid_count}\n"
+        #         
+        #         response_text += f"\n📋 群組列表：\n"
+        #         for i, gid in enumerate(group_info["group_ids"], 1):
+        #             status = "✅" if gid in group_info["valid_ids"] else "❌"
+        #             response_text += f"{i}. {status} {gid}\n"
+        #     else:
+        #         response_text = "❌ 尚未設定任何群組 ID\n請將 Bot 加入群組，系統會自動記錄群組 ID"
+        #     
+        #     from linebot.v3.messaging.models import ReplyMessageRequest
+        #     req = ReplyMessageRequest(
+        #         reply_token=event.reply_token,
+        #         messages=[TextMessage(text=response_text)]
+        #     )
+        #     messaging_api.reply_message(req)
         
         # 顯示推播排程資訊
         if event.message.text.strip() == "@schedule":
