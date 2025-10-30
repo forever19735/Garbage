@@ -285,7 +285,11 @@ def get_current_day_member(group_id, target_date=None):
     
     # 取得推播日列表
     broadcast_days = schedule['days']
-    if not isinstance(broadcast_days, list):
+    
+    # 如果是字串格式，轉換為列表
+    if isinstance(broadcast_days, str):
+        broadcast_days = [d.strip() for d in broadcast_days.split(',')]
+    elif not isinstance(broadcast_days, list):
         return current_members[0] if current_members else None
     
     # 將英文星期轉換為數字 (Monday=0, Sunday=6)
