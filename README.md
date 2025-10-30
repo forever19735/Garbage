@@ -1,4 +1,4 @@
-# 🗑️ LINE 垃圾收集提醒 Bot
+# 🗑️ LINE 垃圾輪值提醒 Bot
 
 智能群組輪值管理系統，支援 **每個群組獨立設定** 的 LINE Bot。自動推播提醒、彈性排程設定、多群組分別管理。
 
@@ -15,7 +15,17 @@
 ### 🔄 自然週輪值系統
 - **智能計算**：基於真實週一到週日的自然週循環
 - **彈性成員**：每週可設定不同數量的負責人
-- **週內按日輪值**：同週內不同推播日分配不同成員
+- ### 💡 疑難排解
+
+#### 常見問題
+**Q: Firebase 連接失敗？**
+A: 檢查 `FIREBASE_CONFIG_JSON` 格式是否正確，確保 JSON 完整無誤
+
+**Q: 權限被拒絕？**
+A: 確認 Firestore 安全規則允許讀寫操作
+
+**Q: 資料未同步？**
+A: 檢查網路連接，Firebase 需要穩定的網路環境播日分配不同成員
 - **自動切換**：每個自然週自動輪替，無需手動管理
 - **基準日期**：首次設定時自動記錄，可隨時重置
 
@@ -25,12 +35,11 @@
 - **即時預覽**：設定後立即顯示下次執行時間
 - **台北時區**：全程使用 Asia/Taipei 時區
 
-### 🎛️ 豐富管理功能
-- **指令分類**：排程、成員、群組、測試等分類管理
-- **狀態監控**：完整的系統狀態檢視
-- **重置選項**：可選擇性重置不同資料
-- **使用說明**：內建完整的幫助系統
-- **簡化指令**：使用直觀的短指令（@time, @day, @week）
+### 🎛️ 簡化使用體驗
+- **直觀指令**：使用簡單的短指令（@time, @day, @week）
+- **自動化管理**：群組自動記錄，無需手動設定
+- **即時反饋**：指令執行後立即顯示結果
+- **內建幫助**：完整的使用說明系統
 
 ### 🚀 快速開始
 
@@ -76,15 +85,11 @@
 @schedule                    # 檢查本群組排程狀態
 ```
 
-💡 **舊指令仍然支援**，新舊指令可以混用！
-
-## �📋 指令大全
+## 📋 指令大全
 
 ### 🔥 常用指令
 - `@schedule` - 查看本群組推播排程
-- `@current` - 查看本週負責人
-- `@members` - 查看本群組完整輪值表  
-- `@status` - 查看系統狀態
+- `@members` - 查看本群組完整輪值表
 
 ### ⚙️ 排程設定（群組專屬）
 - `@time 18:30` - 設定本群組推播時間
@@ -95,28 +100,12 @@
 - `@week 1 Alice,Bob` - 設定第1週成員
 - `@addmember 1 Charlie` - 添加成員到第1週
 - `@removemember 1 Alice` - 從第1週移除成員
-- `@clear_week 1` - 清空第1週成員
-
-### 🔄 重置功能
-- `@reset_date` - 重置基準日期為今天
-- `@backup` - 查看 Firebase 備份狀態
-
-### ☁️ Firebase 雲端功能
-- `@firebase` - 查看 Firebase 連接狀態
-- `@debug_env` - 環境變數診斷
-
-### 🤖 自動備份功能
-- **Firebase 雲端備份**：資料安全存儲在 Google Firebase
-- **自動版本控制**：Firebase 內建備份和恢復機制
-- **即時同步**：多環境資料自動同步
-- **企業級可靠性**：99.99% 的可用性保證
-- **無需手動設定**：完全自動化的雲端存儲
 
 ### ❓ 幫助系統
 - `@help` - 顯示完整指令列表
 - `@help schedule` - 排程管理指令說明
 - `@help members` - 成員管理指令說明
-- `@help manage` - 管理功能指令說明
+- `@help groups` - 群組管理指令說明
 
 ## 🎯 使用情境範例
 
@@ -256,16 +245,12 @@ from firebase_service import firebase_service_instance
 status = firebase_service_instance.is_available()
 print(f"Firebase 連接狀態: {status}")
 
-# 測試群組獨立功能
-from main import get_current_group, update_schedule
+# 測試成員輪值功能
+from main import get_current_group
 
 # 查看特定群組當前負責人
 current = get_current_group("C群組ID")
 print(f"群組當前負責人: {current}")
-
-# 設定群組專屬排程
-result = update_schedule("C群組ID", "mon,fri", 8, 30)
-print(f"排程設定結果: {result}")
 ```
 
 ## 🤝 貢獻指南
@@ -332,17 +317,11 @@ FIREBASE_CONFIG_JSON={"type": "service_account", "project_id": "your-project", .
 FIREBASE_CONFIG_JSON={"type": "service_account", "project_id": "your-project", ...}
 ```
 
-### 🔍 Firebase 監控指令
+### 🔍 Firebase 監控
 
 #### 檢查連接狀態
 ```
-@firebase           # 查看 Firebase 連接和統計資訊
-@debug_env          # 診斷環境變數設定
-```
-
-#### 備份功能
-```
-@backup             # 查看 Firebase 備份狀態  
+@help                   # 查看可用指令  
 ```
 
 ### 💡 Firebase 最佳實踐
@@ -420,4 +399,4 @@ MIT License - 詳見 LICENSE 檔案
 
 ⭐ 如果這個專案對你有幫助，請給個 Star！
 
-🎯 **特色功能：真正的多群組獨立管理 + Firebase 企業級雲端存儲！**
+🎯 **核心功能：簡潔易用的多群組輪值管理 + Firebase 企業級雲端存儲！**
