@@ -144,11 +144,6 @@ def save_group_schedules(schedules):
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
 
-# ===== Railway API 設定 =====
-RAILWAY_API_TOKEN = os.getenv("RAILWAY_API_TOKEN")
-RAILWAY_PROJECT_ID = os.getenv("RAILWAY_PROJECT_ID")
-RAILWAY_SERVICE_ID = os.getenv("RAILWAY_SERVICE_ID")
-
 # 載入持久化的群組 ID 列表
 group_ids = load_group_ids()
 groups = load_groups()  # 儲存每週的成員名單
@@ -207,196 +202,6 @@ def save_to_env_backup():
         print(f"❌ 數據備份失敗: {e}")
         return None
 
-# ===== Railway API 自動更新功能 =====
-def get_railway_project_info():
-    """自動取得 Railway Project 和 Service 資訊"""
-    if not RAILWAY_API_TOKEN:
-        return None, None
-    
-    try:
-        url = "https://backboard.railway.app/graphql/v2"
-        
-        # 查詢用戶的專案列表
-        query = """
-        query {
-            me {
-                projects {
-                    edges {
-                        node {
-                            id
-                            name
-                            services {
-                                edges {
-                                    node {
-                                        id
-                                        name
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        """
-        
-        headers = {
-            "Authorization": f"Bearer {RAILWAY_API_TOKEN}",
-            "Content-Type": "application/json",
-            "User-Agent": "GarbageBot/1.0"
-        }
-        
-        print("🔍 正在查詢 Railway 專案資訊...")
-        
-        response = requests.post(
-            url,
-            json={"query": query},
-            headers=headers,
-            timeout=30
-        )
-        
-        if response.status_code == 200:
-            data = response.json()
-            print(f"📊 API 回應: {data}")
-            
-            if "errors" in data:
-                print(f"❌ Railway API 錯誤: {data['errors']}")
-                return None, None
-            
-            projects = data["data"]["me"]["projects"]["edges"]
-            
-            # 如果有手動設定的 PROJECT_ID，優先使用
-            if RAILWAY_PROJECT_ID:
-                for project in projects:
-                    if project["node"]["id"] == RAILWAY_PROJECT_ID:
-                        services = project["node"]["services"]["edges"]
-                        if services:
-                            service_id = services[0]["node"]["id"]  # 使用第一個 service
-                            print(f"✅ 找到指定專案: {project['node']['name']}")
-                            return RAILWAY_PROJECT_ID, service_id
-            
-            # 自動選擇第一個專案的第一個服務
-            if projects:
-                project = projects[0]["node"]
-                services = project["services"]["edges"]
-                if services:
-                    project_id = project["id"]
-                    service_id = services[0]["node"]["id"]
-                    print(f"✅ 自動選擇專案: {project['name']}")
-                    return project_id, service_id
-                    
-        print(f"❌ Railway API 請求失敗: {response.status_code}")
-        return None, None
-        
-    except Exception as e:
-        print(f"❌ 取得 Railway 專案資訊失敗: {e}")
-        return None, None
-
-def update_railway_environment_variable(variable_name, variable_value):
-    """自動更新 Railway 環境變數"""
-    if not RAILWAY_API_TOKEN:
-        print("⚠️ 需要設定 RAILWAY_API_TOKEN")
-        return False
-    
-    # 自動取得或使用手動設定的 Project/Service ID
-    project_id = RAILWAY_PROJECT_ID
-    service_id = RAILWAY_SERVICE_ID
-    
-    if not project_id or not service_id:
-        print("🔍 自動偵測 Railway 專案資訊...")
-        auto_project_id, auto_service_id = get_railway_project_info()
-        project_id = project_id or auto_project_id
-        service_id = service_id or auto_service_id
-    
-    if not project_id or not service_id:
-        print("❌ 無法取得 Railway 專案資訊")
-        print("請確認:")
-        print("1. RAILWAY_API_TOKEN 是否正確")
-        print("2. 帳號是否有專案")
-        print("3. 或手動設定 RAILWAY_PROJECT_ID 和 RAILWAY_SERVICE_ID")
-        return False
-    
-    try:
-        # Railway GraphQL API endpoint
-        url = "https://backboard.railway.app/graphql/v2"
-        
-        # 更新的 GraphQL mutation (修正格式)
-        mutation = """
-        mutation variableUpsert($input: VariableUpsertInput!) {
-            variableUpsert(input: $input) {
-                id
-                name
-                value
-            }
-        }
-        """
-        
-        variables = {
-            "input": {
-                "projectId": project_id,
-                "serviceId": service_id,
-                "name": variable_name,
-                "value": variable_value
-            }
-        }
-        
-        payload = {
-            "query": mutation,
-            "variables": variables
-        }
-        
-        headers = {
-            "Authorization": f"Bearer {RAILWAY_API_TOKEN}",
-            "Content-Type": "application/json",
-            "User-Agent": "GarbageBot/1.0"
-        }
-        
-        print(f"🔍 嘗試更新變數: {variable_name}")
-        print(f"📊 Project ID: {project_id[:8]}...")
-        print(f"📊 Service ID: {service_id[:8]}...")
-        
-        response = requests.post(
-            url,
-            json=payload,
-            headers=headers,
-            timeout=30
-        )
-        
-        print(f"📡 API 回應狀態: {response.status_code}")
-        
-        if response.status_code == 200:
-            result = response.json()
-            if "errors" in result:
-                print(f"❌ Railway GraphQL 錯誤: {result['errors']}")
-                # 嘗試更詳細的錯誤分析
-                for error in result['errors']:
-                    if 'extensions' in error and 'code' in error['extensions']:
-                        print(f"錯誤代碼: {error['extensions']['code']}")
-                return False
-            elif "data" in result and result["data"]["variableUpsert"]:
-                print(f"✅ Railway 環境變數 {variable_name} 已自動更新")
-                return True
-            else:
-                print(f"❌ Railway API 未預期的回應: {result}")
-                return False
-        else:
-            print(f"❌ Railway API 請求失敗: {response.status_code}")
-            print(f"回應內容: {response.text[:500]}...")
-            
-            # 特殊處理常見錯誤
-            if response.status_code == 401:
-                print("💡 建議: 檢查 RAILWAY_API_TOKEN 是否正確")
-            elif response.status_code == 403:
-                print("💡 建議: 檢查 API Token 是否有足夠權限")
-            elif response.status_code == 400:
-                print("💡 建議: 檢查 Project ID 和 Service ID 是否正確")
-            
-            return False
-            
-    except Exception as e:
-        print(f"❌ Railway API 更新失敗: {e}")
-        return False
-
 def auto_backup():
     """自動備份功能 - 靜默執行，不輸出詳細資訊"""
     try:
@@ -435,11 +240,6 @@ def auto_backup():
             backup_sources.append("環境變數")
         
         print(f"🔄 自動備份完成 ({timestamp}) - {len(encoded_data)} 字符 - 備份到: {', '.join(backup_sources)}")
-        
-        # 自動更新 Railway 環境變數
-        railway_updated = update_railway_environment_variable(PERSISTENT_DATA_KEY, encoded_data)
-        if railway_updated:
-            print("🚀 Railway 環境變數已自動同步")
         
         return encoded_data
     except Exception as e:
@@ -1416,7 +1216,6 @@ mon, tue, wed, thu, fri, sat, sun
 ⚠️ 此操作無法復原，請謹慎使用
 
 � 自動化功能：
-@railway_setup - Railway 自動更新環境變數設定
 設定後會在資料變更時自動同步到 Railway
 
 �📊 系統管理：
@@ -1470,7 +1269,6 @@ mon, tue, wed, thu, fri, sat, sun
 @status - 查看完整系統狀態
 @reset_all - 重置所有資料 (謹慎使用)
 @reset_date - 重置基準日期為今天
-@railway_setup - Railway 自動更新設定
 @debug_env - 環境變數詳細診斷
 
 💡 使用提示：
@@ -2376,70 +2174,6 @@ def handle_message(event):
             )
             messaging_api.reply_message(req)
         
-        # Railway 自動更新設定指導
-        if event.message.text.strip() == "@railway_setup":
-            # 檢查是否在 Railway 環境中
-            railway_env_indicators = [
-                "RAILWAY_ENVIRONMENT_NAME", "RAILWAY_PROJECT_NAME", 
-                "RAILWAY_SERVICE_NAME", "RAILWAY_DEPLOYMENT_ID"
-            ]
-            is_railway = any(os.getenv(indicator) for indicator in railway_env_indicators)
-            
-            # 環境診斷
-            env_info = "🔍 環境診斷：\n"
-            if is_railway:
-                env_info += "✅ 目前運行在 Railway 環境中\n"
-                project_name = os.getenv("RAILWAY_PROJECT_NAME", "未知")
-                service_name = os.getenv("RAILWAY_SERVICE_NAME", "未知") 
-                env_info += f"📊 專案: {project_name}\n"
-                env_info += f"🔧 服務: {service_name}\n"
-            else:
-                env_info += "⚠️ 目前不在 Railway 環境中\n"
-            
-            # 檢查 TOKEN 長度和格式
-            token_info = ""
-            if RAILWAY_API_TOKEN:
-                token_info = f"({len(RAILWAY_API_TOKEN)} 字符)"
-                if len(RAILWAY_API_TOKEN) < 20:
-                    token_info += " ⚠️ 長度異常"
-            
-            response_text = f"""🚂 Railway 自動更新環境變數設定
-
-{env_info}
-🎯 現在只需要設定一個環境變數！
-
-1️⃣ RAILWAY_API_TOKEN (必要)
-   - 到 Railway Dashboard → Account Settings → Tokens
-   - 創建新的 API Token
-   - 複製 Token 值
-
-2️⃣ RAILWAY_PROJECT_ID (可選)
-   - 如果你有多個專案，可以指定特定專案 ID
-   - 不設定的話會自動選擇第一個專案
-
-3️⃣ RAILWAY_SERVICE_ID (可選)  
-   - 如果專案有多個服務，可以指定特定服務 ID
-   - 不設定的話會自動選擇第一個服務
-
-✅ 設定完成後，每次資料更新都會自動同步到 Railway！
-⚡ 指令：@time, @day, @week 等都會觸發自動更新
-
-當前狀態：
-• API Token: {'✅ 已設定 ' + token_info if RAILWAY_API_TOKEN else '❌ 未設定'}
-• Project ID: {'✅ 已設定' if RAILWAY_PROJECT_ID else '🔍 自動偵測'}  
-• Service ID: {'✅ 已設定' if RAILWAY_SERVICE_ID else '🔍 自動偵測'}
-
-{'🚀 如果設定後仍顯示未設定，請重新部署 Railway 服務！' if not RAILWAY_API_TOKEN and is_railway else ''}
-
-💡 簡化模式：只設定 RAILWAY_API_TOKEN 即可開始使用！"""
-            
-            from linebot.v3.messaging.models import ReplyMessageRequest
-            req = ReplyMessageRequest(
-                reply_token=event.reply_token,
-                messages=[TextMessage(text=response_text)]
-            )
-            messaging_api.reply_message(req)
-        
         # 環境變數詳細診斷指令
         if event.message.text.strip() == "@debug_env":
             import sys
@@ -2465,7 +2199,6 @@ def handle_message(event):
             
             # 檢查目標環境變數
             target_vars = [
-                ("RAILWAY_API_TOKEN", "Railway API Token"),
                 ("LINE_CHANNEL_ACCESS_TOKEN", "LINE Access Token"),
                 ("LINE_CHANNEL_SECRET", "LINE Channel Secret"),
                 ("GARBAGE_BOT_PERSISTENT_DATA", "持久化資料")
@@ -2492,7 +2225,7 @@ def handle_message(event):
 {chr(10).join(var_status)}
 
 💡 解決建議：
-{('🔄 請在 Railway Dashboard 檢查環境變數設定' + chr(10) + '🚀 設定後請重新部署服務讓變數生效') if is_railway and not RAILWAY_API_TOKEN else ''}
+{'🔄 請在 Railway Dashboard 檢查環境變數設定' + chr(10) + '🚀 設定後請重新部署服務讓變數生效' if is_railway else ''}
 {'📱 目前在本地環境，無法讀取 Railway 環境變數' if not is_railway else ''}
 
 ⚙️ 系統資訊：
