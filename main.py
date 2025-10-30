@@ -107,8 +107,6 @@ def load_groups():
 def save_groups():
     """儲存成員群組資料"""
     result = data_manager.save_data('groups', groups)
-    # 數據變更時自動備份
-    auto_backup()
     return result
 
 def load_base_date():
@@ -132,8 +130,6 @@ def load_group_schedules():
 def save_group_schedules(schedules):
     """儲存群組排程設定"""
     result = data_manager.save_data('group_schedules', schedules)
-    # 排程變更時自動備份
-    auto_backup()
     return result
 
 
@@ -149,64 +145,6 @@ group_ids = load_group_ids()
 groups = load_groups()  # 儲存每週的成員名單
 base_date = load_base_date()  # 儲存基準日期（第一週開始日期）
 group_schedules = load_group_schedules()  # 載入群組排程設定
-
-def auto_backup():
-    """自動備份功能 - 只備份到 Firebase"""
-    try:
-        # 創建 Firebase 備份
-        firebase_backup = None
-        if firebase_service.firebase_service_instance.is_available():
-            firebase_backup = firebase_service.firebase_service_instance.create_backup()
-        
-        from datetime import datetime
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
-        if firebase_backup:
-            print(f"🔄 自動備份完成 ({timestamp}) - 備份到: Firebase")
-            return True
-        else:
-            print(f"⚠️ 自動備份失敗 ({timestamp}) - Firebase 不可用")
-            return False
-    except Exception as e:
-        print(f"⚠️ 自動備份失敗: {e}")
-        return False
-
-def trigger_auto_backup():
-    """觸發自動備份並通知用戶"""
-    backup_success = auto_backup()
-    if backup_success and LINE_CHANNEL_ACCESS_TOKEN:
-        # 如果有設定的群組，發送備份提醒到第一個群組
-        if group_ids:
-            try:
-                url = 'https://api.line.me/v2/bot/message/push'
-                headers = {
-                    'Authorization': f'Bearer {LINE_CHANNEL_ACCESS_TOKEN}',
-                    'Content-Type': 'application/json'
-                }
-                
-                message = """📱 自動備份提醒
-
-✅ 數據已自動備份到 Firebase
-☁️ 您的資料安全存儲在雲端
-
-🔧 所有設定都已同步，無需手動操作
-⚡ 使用 @backup 指令查看備份狀態"""
-
-                data = {
-                    'to': group_ids[0],  # 發送到第一個群組
-                    'messages': [{'type': 'text', 'text': message}]
-                }
-                
-                response = requests.post(url, headers=headers, json=data)
-                if response.status_code == 200:
-                    print(f"✅ 自動備份提醒已發送到群組: {group_ids[0]}")
-                else:
-                    print(f"⚠️ 發送備份提醒失敗: {response.status_code}")
-                    
-            except Exception as e:
-                print(f"⚠️ 發送自動備份提醒失敗: {e}")
-        
-    return backup_success
 
 # 載入數據 - 直接從 Firebase 載入
 if firebase_service.firebase_service_instance.is_available():
@@ -1669,28 +1607,6 @@ def initialize_group_schedules():
 # 初始化排程
 initialize_group_schedules()
 
-# 添加每日自動備份任務
-try:
-    scheduler.add_job(
-        trigger_auto_backup,
-        'cron',
-        hour=2,  # 每天凌晨 2 點自動備份
-        minute=0,
-        timezone=pytz.timezone('Asia/Taipei'),
-        id='daily_auto_backup',
-        replace_existing=True
-    )
-    print("✅ 每日自動備份任務已設定（每天 02:00）")
-except Exception as e:
-    print(f"⚠️ 設定自動備份任務失敗: {e}")
-
-# 啟動時執行一次自動備份
-try:
-    trigger_auto_backup()
-    print("✅ 啟動時自動備份完成")
-except Exception as e:
-    print(f"⚠️ 啟動時備份失敗: {e}")
-
 scheduler.start()
 
 print(f"排程已啟動，目前有 {len(group_jobs)} 個群組排程")
@@ -2038,8 +1954,7 @@ def handle_message(event):
 • 無需手動設定
 • 企業級可靠性
 
-🔄 系統每天 02:00 自動備份
-⚡ 資料變更時也會自動備份"""
+⚡ 使用 @backup 指令隨時備份資料"""
                     else:
                         response_text = "⚠️ Firebase 備份建立失敗，請稍後再試"
                 else:
