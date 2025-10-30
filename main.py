@@ -766,33 +766,37 @@ def clear_all_group_ids():
 
 def reset_all_data():
     """
-    重置所有資料 (成員安排 + 群組 ID + 基準日期)
+    重置所有資料 (成員安排 + 群組 ID + 基準日期 + 排程設定)
     
     Returns:
         dict: 操作結果
     """
-    global groups, group_ids, base_date
+    global groups, group_ids, base_date, group_schedules
     
     # 記錄原始資料
     old_groups_count = len(groups) if isinstance(groups, dict) else 0
     old_group_ids_count = len(group_ids)
     old_base_date = base_date
+    old_schedules_count = len(group_schedules) if isinstance(group_schedules, dict) else 0
     
     # 清空所有資料
     groups = {}
     group_ids = []
     base_date = None
+    group_schedules = {}
     
     # 儲存變更
     save_groups()
     save_group_ids()
     reset_base_date()
+    save_group_schedules(group_schedules)
     
     return {
         "success": True,
-        "message": f"已重置所有資料 (清空 {old_groups_count} 週成員安排 + {old_group_ids_count} 個群組 ID + 基準日期)",
+        "message": f"已重置所有資料 (清空 {old_groups_count} 週成員安排 + {old_group_ids_count} 個群組 ID + {old_schedules_count} 個排程設定 + 基準日期)",
         "cleared_groups": old_groups_count,
         "cleared_group_ids": old_group_ids_count,
+        "cleared_schedules": old_schedules_count,
         "old_base_date": old_base_date.isoformat() if old_base_date else None
     }
 
@@ -1076,7 +1080,7 @@ mon, tue, wed, thu, fri, sat, sun
 
 🔄 管理功能：
 @status - 查看完整系統狀態
-@reset_all - 重置所有資料 (謹慎使用)
+@reset_all - 重置所有資料 (含排程設定，謹慎使用)
 @reset_date - 重置基準日期為今天
 @debug_env - 環境變數詳細診斷
 
