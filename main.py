@@ -65,6 +65,8 @@ class DataManager:
                 return self.firebase_service.save_base_date(data)
             elif data_type == 'group_schedules':
                 return self.firebase_service.save_group_schedules(data)
+            elif data_type == 'group_messages':
+                return self.firebase_service.save_group_messages(data)
         except Exception as e:
             print(f"⚠️ 儲存 {data_type} 到 Firebase 失敗: {e}")
             return False
@@ -132,6 +134,14 @@ def save_group_schedules(schedules):
     result = data_manager.save_data('group_schedules', schedules)
     return result
 
+def load_group_messages():
+    """載入群組自訂文案設定"""
+    return data_manager.load_data('group_messages', {})
+
+def save_group_messages():
+    """儲存群組自訂文案設定"""
+    return data_manager.save_data('group_messages', group_messages)
+
 
 
 
@@ -145,6 +155,7 @@ group_ids = load_group_ids()
 groups = load_groups()  # 儲存每週的成員名單
 base_date = load_base_date()  # 儲存基準日期（第一週開始日期）
 group_schedules = load_group_schedules()  # 載入群組排程設定
+group_messages = load_group_messages()  # 載入群組自訂文案設定
 
 # 載入數據 - 直接從 Firebase 載入
 if firebase_service.firebase_service_instance.is_available():
@@ -649,7 +660,7 @@ def get_member_schedule_summary(group_id=None):
         return f"👥 尚未設定成員輪值表{group_info}\n\n💡 使用「@week 1 小明,小華」來設定第1週的成員"
     
     group_info = f" (群組: {schedule['group_id']})" if schedule['group_id'] != "legacy" else ""
-    summary = f"👥 垃圾收集成員輪值表{group_info}\n\n"
+    summary = f"👥 輪值成員表{group_info}\n\n"
     summary += f"📅 總共 {schedule['total_weeks']} 週輪值\n"
     summary += f"📍 目前第 {schedule['current_week']} 週\n"
     
@@ -1007,10 +1018,40 @@ mon, tue, wed, thu, fri, sat, sun
 🆘 獲取幫助：
 @help - 顯示所有指令
 @help 類別 - 顯示特定類別指令
-類別：schedule, members, groups"""
+類別：schedule, members, groups, message"""
+
+    elif category == "message":
+        return """📝 自訂文案設定指令
+
+🔧 設定文案：
+@message 自訂文案內容 - 設定專屬提醒訊息
+@message - 查看目前文案設定
+@message reset - 恢復預設垃圾收集文案
+
+💡 可用佔位符：
+• {name} - 負責人姓名
+• {date} - 日期 (MM/DD)
+• {weekday} - 星期 (週一到週日)
+
+📋 文案範例：
+@message 📋 今天 {date} ({weekday}) 輪到 {name} 值日！
+@message 🧹 {name}，該打掃辦公室了！({date})
+@message ⚡ {weekday} 提醒：{name} 負責設備檢查
+@message 🚮 垃圾收集日：{name} 請記得收垃圾 ({date})
+
+🔄 管理文案：
+- 每個群組可設定獨立的提醒文案
+- 文案會自動儲存到雲端
+- 支援表情符號和自訂格式
+- 可隨時恢復預設文案
+
+💡 使用建議：
+- 根據不同場景自訂文案（值日、清潔、檢查等）
+- 使用表情符號讓提醒更生動
+- 善用佔位符讓文案更個人化"""
 
     else:  # 顯示所有指令概覽
-        return """🤖 垃圾輪值提醒 Bot 指令大全
+        return """🤖 輪值提醒 Bot 指令大全
 
  常用指令：
 @schedule - 查看推播排程
@@ -1026,10 +1067,15 @@ mon, tue, wed, thu, fri, sat, sun
 @addmember 1 Charlie - 添加成員到第1週
 @removemember 1 Alice - 從第1週移除成員
 
+📝 文案設定：
+@message 自訂提醒文案 - 設定專屬提醒訊息
+@message reset - 恢復預設文案
+
 📋 詳細查看：
 @help schedule - 排程管理指令說明
 @help members - 成員管理指令說明  
 @help groups - 群組管理指令說明
+@help message - 自訂文案設定說明
 
 💡 使用提示：
 - 所有時間都是台北時間
@@ -1044,6 +1090,7 @@ mon, tue, wed, thu, fri, sat, sun
 1. 將 Bot 加入群組 (自動記錄群組)
 2. 輸入 @cron mon,thu 11 38 (設定提醒星期和時間)
 3. 輸入 @week 1 姓名1,姓名2 (設定第幾週成員)
+4. 輸入 @message 今天輪到{name}值日！ (選用：自訂文案)
 
 ❓ 需要詳細說明請輸入：@help 類別名稱"""
 
@@ -1078,14 +1125,20 @@ def get_command_examples():
 將 Bot 加入群組B - 自動記錄
 兩個群組都會收到提醒
 
-🧪 驗證流程：
+📝 自訂文案範例：
+@message 📋 今天 {date} ({weekday}) 輪到 {name} 值日！
+@message � {name}，該打掃辦公室了！({date})
+@message ⚡ {weekday} 提醒：{name} 負責設備檢查
+
+�🧪 驗證流程：
 @members - 查看輪值安排
 @schedule - 確認推播時間  
 
 💡 實用技巧：
 - 用表情符號標記成員：@week 1 Alice🌟,Bob🔥
 - 設定備用成員：@week 3 主要成員,備用成員
-- 查看下次提醒：@schedule"""
+- 查看下次提醒：@schedule
+- 自訂提醒文案：@message 您的專屬文案"""
 
 # ===== 取得目前設定的群組 ID =====
 def get_line_group_ids():
@@ -1342,7 +1395,18 @@ def send_group_reminder(group_id):
         date_str = f"{today.month}/{today.day}"
         
         # 建立提醒訊息（顯示當天負責的單一成員）
-        message = f"🗑️ 今天 {date_str} ({weekday}) 輪到 {responsible_member} 收垃圾！"
+        # 檢查是否有自訂文案
+        custom_message = group_messages.get(group_id, "")
+        if custom_message:
+            # 使用自訂文案，支援 {name}, {date}, {weekday} 佔位符
+            message = custom_message.format(
+                name=responsible_member,
+                date=date_str,
+                weekday=weekday
+            )
+        else:
+            # 使用預設的垃圾收集文案
+            message = f"🗑️ 今天 {date_str} ({weekday}) 輪到 {responsible_member} 收垃圾！"
         
         print(f"群組 {group_id} 推播訊息: {message}")
         
@@ -1470,7 +1534,12 @@ def send_trash_reminder():
         print(f"群組 {gid} 當前成員: {group}")
         
         if not group:
-            message = f"🗑️ 今天 {today.strftime('%m/%d')} ({weekday_names[weekday]}) 是收垃圾日！\n💡 請設定成員輪值表\n\n使用指令：@week 1 成員1,成員2"
+            # 檢查是否有自訂文案
+            custom_message = group_messages.get(gid, "")
+            if custom_message:
+                message = f"⚠️ 今天 {today.strftime('%m/%d')} ({weekday_names[weekday]}) 是提醒日！\n💡 請設定成員輪值表\n\n使用指令：@week 1 成員1,成員2"
+            else:
+                message = f"🗑️ 今天 {today.strftime('%m/%d')} ({weekday_names[weekday]}) 是收垃圾日！\n💡 請設定成員輪值表\n\n使用指令：@week 1 成員1,成員2"
             person = "未設定成員"
         else:
             # 根據星期決定誰收垃圾（可自訂規則）
@@ -1482,7 +1551,18 @@ def send_trash_reminder():
             else:  # 其他天數可自訂規則
                 person = group[weekday % len(group)] if group else "無成員"
             
-            message = f"🗑️ 今天 {today.strftime('%m/%d')} ({weekday_names[weekday]}) 輪到 {person} 收垃圾！"
+            # 檢查是否有自訂文案
+            custom_message = group_messages.get(gid, "")
+            if custom_message:
+                # 使用自訂文案，支援 {name}, {date}, {weekday} 佔位符
+                message = custom_message.format(
+                    name=person,
+                    date=today.strftime('%m/%d'),
+                    weekday=weekday_names[weekday]
+                )
+            else:
+                # 使用預設的垃圾收集文案
+                message = f"🗑️ 今天 {today.strftime('%m/%d')} ({weekday_names[weekday]}) 輪到 {person} 收垃圾！"
         
         print(f"群組 {gid} 推播訊息: {message}")
         
@@ -2063,6 +2143,66 @@ def handle_message(event):
                 )
                 messaging_api.reply_message(req)
         
+        # 設定自訂文案 - 格式: @message 自訂提醒文案
+        if event.message.text.strip().startswith("@message"):
+            message_text = event.message.text.strip()
+            
+            if len(message_text) > 8:  # "@message " 長度為 9
+                custom_message = message_text[9:]  # 取得 "@message " 之後的內容
+                
+                # 取得當前群組ID
+                group_id = getattr(event.source, 'group_id', None)
+                
+                if group_id:
+                    global group_messages
+                    
+                    # 檢查是否要重置為預設
+                    if custom_message.strip().lower() == "reset":
+                        if group_id in group_messages:
+                            del group_messages[group_id]
+                            save_group_messages()
+                            response_text = "✅ 已恢復為預設的垃圾收集文案！\n\n🗑️ 預設格式：\n今天 {date} ({weekday}) 輪到 {name} 收垃圾！"
+                        else:
+                            response_text = "💡 目前就是使用預設文案"
+                    else:
+                        group_messages[group_id] = custom_message
+                        save_group_messages()
+                        
+                        response_text = f"✅ 自訂文案設定成功！\n\n📝 文案內容：\n{custom_message}\n\n💡 可用佔位符：\n• {{name}} - 負責人姓名\n• {{date}} - 日期 (MM/DD)\n• {{weekday}} - 星期\n\n範例：\n📋 今天 {{date}} ({{weekday}}) 輪到 {{name}} 值日！"
+                else:
+                    response_text = "❌ 只能在群組中設定自訂文案"
+            else:
+                # 如果只輸入 @message 沒有內容，則顯示目前設定和說明
+                group_id = getattr(event.source, 'group_id', None)
+                if group_id and group_id in group_messages:
+                    current_message = group_messages[group_id]
+                    response_text = f"📝 目前的自訂文案：\n{current_message}\n\n💡 修改文案：\n@message 新的文案內容\n\n🔄 恢復預設：\n@message reset"
+                else:
+                    response_text = """📝 設定自訂提醒文案
+
+🔧 指令格式：
+@message 自訂文案內容
+
+💡 可用佔位符：
+• {name} - 負責人姓名
+• {date} - 日期 (MM/DD)  
+• {weekday} - 星期
+
+📋 文案範例：
+@message 📋 今天 {date} ({weekday}) 輪到 {name} 值日！
+@message 🧹 {name}，該打掃辦公室了！({date})
+@message ⚡ {weekday} 提醒：{name} 負責設備檢查
+
+🔄 恢復預設文案：
+@message reset"""
+            
+            from linebot.v3.messaging.models import ReplyMessageRequest
+            req = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=response_text)]
+            )
+            messaging_api.reply_message(req)
+        
         # 添加成員到指定週 - 格式: @addmember 1 成員名
         if event.message.text.strip().startswith("@addmember"):
             import re
@@ -2170,13 +2310,14 @@ def handle_join(event):
             save_group_ids()
             
             # 發送歡迎訊息並告知群組 ID 已記錄
-            welcome_msg = f"""🤖 歡迎使用垃圾輪值提醒 Bot！
+            welcome_msg = f"""🤖 歡迎使用輪值提醒 Bot！
 
 ✅ 群組 ID 已自動記錄：{group_id[:8]}...
 
 🚀 快速開始：
 @cron mon,thu 14 55 - 設定提醒星期和時間
 @week 1 姓名1,姓名2 - 設定輪值成員
+@message 今天輪到{name}值日！ - 自訂提醒文案（選用）
 @help - 查看完整指令
 
 💡 提示：所有設定都會自動儲存，重啟後不會遺失！"""
