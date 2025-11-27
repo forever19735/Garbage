@@ -1681,7 +1681,7 @@ def handle_message(event):
     # 使用者設定推播星期、時、分指令
     if event.message.text.strip().startswith("@cron"):
         import re
-        m = re.match(r"@cron ([a-z,]+) (\d{1,2}) (\d{1,2})", event.message.text.strip())
+        m = re.match(r"@cron ([a-z,]+) (\d{1,2})[: ](\d{1,2})", event.message.text.strip())
         if m:
             days = m.group(1)
             hour = int(m.group(2))
@@ -1729,7 +1729,7 @@ def handle_message(event):
             from linebot.v3.messaging.models import ReplyMessageRequest
             req = ReplyMessageRequest(
                 reply_token=event.reply_token,
-                messages=[TextMessage(text="格式錯誤，請輸入 @cron mon,thu 18 30")]
+                messages=[TextMessage(text="格式錯誤，請輸入 @cron mon,thu 18 30 或 @cron mon,thu 18:30")]
             )
             messaging_api.reply_message(req)
 
