@@ -526,7 +526,7 @@ def update_member_schedule(week_num, members, group_id=None):
     group_display = f" (群組: {target_group_id})" if target_group_id != "legacy" else ""
     return {
         "success": True,
-        "message": f"已設定第 {week_num} 週成員：{', '.join(members)}{group_display}"
+        "message": f"已設定第 {week_num} 週成員：{', '.join(members)}"
     }
     
     # 確保 groups 是字典格式
@@ -660,7 +660,7 @@ def get_member_schedule_summary(group_id=None):
         return f"👥 尚未設定成員輪值表{group_info}\n\n💡 使用「@week 1 小明,小華」來設定第1週的成員"
     
     group_info = f" (群組: {schedule['group_id']})" if schedule['group_id'] != "legacy" else ""
-    summary = f"👥 輪值成員表{group_info}\n\n"
+    summary = f"👥 輪值成員表\n\n"
     summary += f"📅 總共 {schedule['total_weeks']} 週輪值\n"
     summary += f"📍 目前第 {schedule['current_week']} 週\n"
     
@@ -1088,7 +1088,7 @@ mon, tue, wed, thu, fri, sat, sun
 
 🏃‍♂️ 新手快速開始：
 1. 將 Bot 加入群組 (自動記錄群組)
-2. 輸入 @cron mon,thu 11 38 (設定提醒星期和時間)
+2. 輸入 @cron mon,thu 18:00 (設定提醒星期和時間)
 3. 輸入 @week 1 姓名1,姓名2 (設定第幾週成員)
 4. 輸入 @message 今天輪到{name}值日！ (選用：自訂文案)
 
@@ -1475,7 +1475,7 @@ def get_schedule_summary(group_id=None):
         # 下次執行時間
         next_run = info.get("next_run_time", "未知")
         
-        summary = f"""📅 群組 {group_id} 垃圾收集提醒排程
+        summary = f"""📅 群組垃圾輪值排程
 
 🕐 執行時間: {time_str} (Asia/Taipei)
 📆 執行星期: {days_chinese}
@@ -1489,7 +1489,7 @@ def get_schedule_summary(group_id=None):
         if not group_schedules:
             return "❌ 尚未設定任何群組排程"
         
-        summary = "📅 所有群組垃圾收集提醒排程\n\n"
+        summary = "📅 所有群組垃圾輪值排程\n\n"
         for gid in group_schedules:
             group_summary = get_schedule_summary(gid)
             summary += group_summary + "\n" + "="*40 + "\n"
@@ -2312,10 +2312,8 @@ def handle_join(event):
             # 發送歡迎訊息並告知群組 ID 已記錄
             welcome_msg = f"""🤖 歡迎使用輪值提醒 Bot！
 
-✅ 群組 ID 已自動記錄：{group_id[:8]}...
-
 🚀 快速開始：
-@cron mon,thu 14 55 - 設定提醒星期和時間
+@cron mon,thu 18:00 - 設定提醒星期和時間
 @week 1 姓名1,姓名2 - 設定輪值成員
 @message 今天輪到{{name}}值日！ - 自訂提醒文案（選用）
 @help - 查看完整指令
