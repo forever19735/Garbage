@@ -665,17 +665,17 @@ def get_member_schedule_summary(group_id=None):
     summary += f"📍 目前第 {schedule['current_week']} 週\n"
     
     # 顯示基準日期資訊
-    if schedule["base_date"]:
-        from datetime import datetime
-        base_date_obj = datetime.fromisoformat(schedule["base_date"]).date()
-        base_monday = base_date_obj - timedelta(days=base_date_obj.weekday())
+    # if schedule["base_date"]:
+    #     from datetime import datetime
+    #     base_date_obj = datetime.fromisoformat(schedule["base_date"]).date()
+    #     base_monday = base_date_obj - timedelta(days=base_date_obj.weekday())
         
-        summary += f"📆 基準日期: {base_date_obj.strftime('%Y-%m-%d')}\n"
-        summary += f"📊 基準週一: {base_monday.strftime('%Y-%m-%d')}\n"
-        summary += f"🔄 計算方式: 自然週（週一到週日）\n"
+    #     summary += f"📆 基準日期: {base_date_obj.strftime('%Y-%m-%d')}\n"
+    #     summary += f"📊 基準週一: {base_monday.strftime('%Y-%m-%d')}\n"
+    #     summary += f"🔄 計算方式: 自然週（週一到週日）\n"
         
-        if schedule.get("weeks_diff", 0) > 0:
-            summary += f"⏳ 已經過: {schedule['weeks_diff']} 個自然週\n"
+    #     if schedule.get("weeks_diff", 0) > 0:
+    #         summary += f"⏳ 已經過: {schedule['weeks_diff']} 個自然週\n"
     
     summary += "\n"
     
