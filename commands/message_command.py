@@ -47,7 +47,7 @@ class MessageCommand(BaseCommand):
                 if group_id in group_messages:
                     del group_messages[group_id]
                     if save_group_messages:
-                        save_group_messages()
+                        save_group_messages(group_messages)
                     return "✅ 已恢復為預設的垃圾收集文案！\n\n🗑️ 預設格式：\n今天 {date} ({weekday}) 輪到 {name} 收垃圾！"
                 else:
                     return "💡 目前就是使用預設文案"
@@ -55,7 +55,7 @@ class MessageCommand(BaseCommand):
             # 設定自訂文案
             group_messages[group_id] = custom_message
             if save_group_messages:
-                save_group_messages()
+                save_group_messages(group_messages)
             
             return f"""✅ 自訂文案設定成功！
 
