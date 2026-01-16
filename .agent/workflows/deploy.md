@@ -1,10 +1,170 @@
 ---
-description: Deploy LINE Bot to Railway.app with Firebase
+description: Deploy LINE Bot to Zeabur with Firebase
 ---
 
-# Deploy to Railway
+# Deploy to Zeabur
 
-This workflow guides you through deploying the LINE Bot garbage duty rotation system to Railway.app.
+This workflow guides you through deploying the LINE Bot garbage duty rotation system to Zeabur.
+
+## Prerequisites
+
+- GitHub repository with the project code
+- Zeabur account
+- LINE Developers account
+- Firebase project with Firestore enabled
+
+## Steps
+
+### 1. Prepare Project Files
+
+Ensure the following files exist in your repository:
+
+**No Procfile needed** - Zeabur auto-detects Python apps
+
+**requirements.txt:**
+Verify all dependencies are listed:
+```
+Flask==3.0.0
+line-bot-sdk==3.5.0
+python-dotenv==1.0.0
+APScheduler==3.10.4
+pytz==2023.3
+firebase-admin==6.2.0
+requests==2.31.0
+```
+
+**main.py:**
+Check that the entry point uses PORT environment variable:
+```python
+if __name__ == "__main__":
+    port = int(os.getenv("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
+```
+
+### 2. Create Zeabur Project
+
+// turbo
+1. Go to [zeabur.com](https://zeabur.com)
+2. Click "New Project"
+3. Choose "Deploy from GitHub"
+4. Select your repository
+5. Zeabur will auto-detect it as a Python app
+
+### 3. Configure Environment Variables
+
+In Zeabur dashboard → Variables tab, add:
+
+**LINE_CHANNEL_ACCESS_TOKEN:**
+- Go to LINE Developers Console
+- Select your Messaging API channel
+- Copy the Channel access token
+- Paste in Zeabur
+
+**LINE_CHANNEL_SECRET:**
+- In LINE Developers Console
+- Copy the Channel secret
+- Paste in Zeabur
+
+**FIREBASE_CONFIG_JSON:**
+- Go to Firebase Console → Project Settings → Service Accounts
+- Click "Generate new private key"
+- Download JSON file
+- Copy the ENTIRE JSON content (as one line)
+- Paste in Zeabur
+
+### 4. Deploy
+
+// turbo
+Zeabur will automatically deploy after adding environment variables.
+
+Check deployment status:
+1. Go to "Deployments" tab
+2. Wait for "Running" status
+3. Click deployment to view logs
+
+### 5. Get Public URL
+
+// turbo
+1. Go to "Networking" tab
+2. Click "Generate Domain"
+3. Or add custom domain
+4. Copy the generated URL (e.g., `https://your-app.zeabur.app`)
+
+### 6. Configure LINE Webhook
+
+1. Go to LINE Developers Console
+2. Select your Messaging API channel
+3. Go to "Messaging API" tab
+4. Set Webhook URL: `https://your-app.zeabur.app/callback`
+5. Enable "Use webhook"
+6. Click "Verify" (should show success)
+
+### 7. Verify Deployment
+
+Test the health endpoint:
+// turbo
+```bash
+curl https://your-app.zeabur.app/
+```
+
+Should return: `🗑️ LINE Bot is running!`
+
+Check Zeabur logs:
+1. Go to "Logs" tab
+2. Verify you see:
+   - `✅ Firebase 可用`
+   - `ACCESS_TOKEN: ...`
+   - `Running on http://0.0.0.0:5000`
+
+### 8. Test in LINE
+
+1. Add the bot to a LINE group
+2. Send `@help` in the group
+3. Bot should respond with help menu
+
+## Verification
+
+- [ ] Zeabur deployment shows "Running"
+- [ ] Health endpoint returns 200 OK
+- [ ] Logs show Firebase connected
+- [ ] LINE webhook verification passes
+- [ ] Bot responds to `@help` in group
+
+## Troubleshooting
+
+**Deployment Failed:**
+- Check logs for Python errors
+- Ensure all dependencies in `requirements.txt`
+- Verify Python version compatibility
+
+**Webhook 400 Error:**
+- Verify `LINE_CHANNEL_SECRET` is correct
+- Check webhook URL has `/callback` endpoint
+
+**Firebase Connection Failed:**
+- Verify `FIREBASE_CONFIG_JSON` is complete
+- Check Firebase project is active
+- Ensure service account has permissions
+
+**Scheduled Reminders Not Working:**
+- Zeabur keeps apps running 24/7
+- Check scheduler logs for errors
+- Verify cron configuration with `@schedule`
+
+## Zeabur Advantages
+
+**vs Railway:**
+- ✅ No sleep on free tier
+- ✅ Better pricing for small projects
+- ✅ Faster deployment
+- ✅ Built-in metrics and monitoring
+- ✅ Multiple region support
+
+## Next Steps
+
+- Run `/setup-line-bot` to configure LINE settings
+- Run `/test-debug` to verify all features
+
 
 ## Prerequisites
 
