@@ -135,6 +135,10 @@ class MemberService:
             return None
         
         # 如果沒有排程服務或排程設定，返回第一個成員
+        if group_schedules is None:
+             if self.schedule_service:
+                 group_schedules = self.schedule_service.group_schedules
+        
         if group_schedules is None or group_id not in group_schedules:
             return current_members[0] if current_members else None
         

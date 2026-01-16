@@ -369,7 +369,7 @@ def send_group_reminder(group_id):
         today = datetime.now(pytz.timezone('Asia/Taipei')).date()
         
         # 取得今天負責的成員（週內按日輪值）
-        responsible_member = member_service.get_current_day_member(group_id, today, group_schedules)
+        responsible_member = member_service.get_current_day_member(group_id, today)
         
         if not responsible_member:
             print(f"群組 {group_id} 今天 {today} 沒有設定負責成員")
