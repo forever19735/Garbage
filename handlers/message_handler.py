@@ -5,23 +5,7 @@
 
 from typing import Optional
 from commands.handler import handle_command, create_command_context, is_known_command
-
-
-# 指令別名映射表
-COMMAND_ALIASES = {
-    '@設定時間': '@time',
-    '@設定星期': '@day',
-    '@設定排程': '@cron',
-    '@設定成員': '@week',
-    '@設定文案': '@message',
-    '@查看排程': '@schedule',
-    '@查看成員': '@members',
-    '@查看狀態': '@status',
-    '@幫助': '@help',
-    '@說明': '@help',
-    '@快速設定': '@quickstart',
-    '@重置': '@reset_all',
-}
+from config import COMMAND_ALIASES, AVAILABLE_COMMANDS, ERROR_TEMPLATES, get_command_description
 
 
 def normalize_command(text: str) -> str:
