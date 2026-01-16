@@ -73,10 +73,6 @@ class HelpCommand(BaseCommand):
 • @message [文案] - 設定自訂文案
 • @message reset - 恢復預設文案
 
-🔍 系統狀態
-• @status - 查看系統狀態
-• @firebase - 查看 Firebase 狀態
-• @backup - 備份資料
 
 🔄 重置功能
 • @reset_date - 重置基準日期

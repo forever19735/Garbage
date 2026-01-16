@@ -14,7 +14,6 @@ from commands.members_command import (
     remove_member_command, clear_week_command, clear_members_command
 )
 from commands.system_command import (
-    status_command, firebase_command, backup_command,
     reset_all_command, reset_date_command, clear_groups_command, debug_env_command
 )
 from commands.message_command import message_command
@@ -37,9 +36,6 @@ all_commands = [
     clear_week_command,
     clear_members_command,
     # 系統
-    status_command,
-    firebase_command,
-    backup_command,
     reset_all_command,
     reset_date_command,
     clear_groups_command,
