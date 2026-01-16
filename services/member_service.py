@@ -29,7 +29,31 @@ class MemberService:
         self.data_manager = data_manager
         self.schedule_service = schedule_service
         self._groups = None
+        self._group_ids = None
+        self._group_messages = None
         self._base_date = None
+    
+    @property
+    def group_ids(self) -> list:
+        """取得群組 ID 列表"""
+        if self._group_ids is None:
+            self._group_ids = self.data_manager.load_data('group_ids', [])
+        return self._group_ids
+    
+    @group_ids.setter
+    def group_ids(self, value: list):
+        self._group_ids = value
+        
+    @property
+    def group_messages(self) -> dict:
+        """取得群組自訂訊息"""
+        if self._group_messages is None:
+            self._group_messages = self.data_manager.load_data('group_messages', {})
+        return self._group_messages
+    
+    @group_messages.setter
+    def group_messages(self, value: dict):
+        self._group_messages = value
     
     @property
     def groups(self) -> dict:
@@ -56,7 +80,63 @@ class MemberService:
     def reload_data(self):
         """重新載入資料"""
         self._groups = None
+        self._group_ids = None
+        self._group_messages = None
         self._base_date = None
+        
+    def add_group(self, group_id: str) -> bool:
+        """
+        添加群組 ID
+        
+        Args:
+            group_id: 群組 ID
+            
+        Returns:
+            bool: 是否為新添加 (若已存在則回傳 False)
+        """
+        current_ids = self.group_ids
+        if group_id not in current_ids:
+            current_ids.append(group_id)
+            self.data_manager.save_data('group_ids', current_ids)
+            self._group_ids = current_ids # 確保內存更新
+            return True
+        return False
+        
+    def remove_group(self, group_id: str) -> bool:
+        """移除群組 ID"""
+        current_ids = self.group_ids
+        if group_id in current_ids:
+            current_ids.remove(group_id)
+            self.data_manager.save_data('group_ids', current_ids)
+            self._group_ids = current_ids
+            return True
+        return False
+        
+    def get_all_groups(self) -> list:
+        """取得所有群組 ID"""
+        return self.group_ids
+        
+    def get_group_message_template(self, group_id: str) -> Optional[str]:
+        """取得群組自訂訊息範本"""
+        return self.group_messages.get(group_id)
+        
+    def set_group_message_template(self, group_id: str, message: str):
+        """設定群組自訂訊息範本"""
+        messages = self.group_messages
+        messages[group_id] = message
+        self.data_manager.save_data('group_messages', messages)
+        self._group_messages = messages
+        
+    def clear_all_group_ids(self):
+        """清空所有群組 ID"""
+        old_count = len(self.group_ids)
+        self.group_ids = []
+        self.data_manager.save_data('group_ids', [])
+        return {
+            "success": True, 
+            "message": f"已清空所有群組 ID (原有 {old_count} 個)",
+            "cleared_count": old_count
+        }
     
     def get_current_group(self, group_id: str = None) -> List[str]:
         """

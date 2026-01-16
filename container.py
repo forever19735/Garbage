@@ -25,3 +25,7 @@ class AppContainer:
         self.schedule_service = ScheduleService(self.firebase_repository, scheduler, group_jobs)
         # Injection ScheduleService into MemberService if needed (circular dependency resolution)
         self.member_service.schedule_service = self.schedule_service
+        
+        # Initialize NotificationService
+        from services.notification_service import NotificationService
+        self.notification_service = NotificationService(self.member_service, self.schedule_service)

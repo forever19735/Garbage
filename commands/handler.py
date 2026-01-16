@@ -22,7 +22,7 @@ def create_command_context(
     member_service=None,
     schedule_service=None,
     firebase_service=None,
-    # 資料
+    # 資料 (兼容舊代碼，但在新架構中建議直接從 Service 獲取)
     groups: dict = None,
     group_schedules: dict = None,
     group_messages: dict = None,
@@ -55,12 +55,12 @@ def create_command_context(
         'member_service': member_service,
         'schedule_service': schedule_service,
         'firebase_service': firebase_service,
-        # 資料
-        'groups': groups or {},
-        'group_schedules': group_schedules or {},
-        'group_messages': group_messages or {},
-        'base_date': base_date,
-        # 回調函數（用於向後兼容）
+        # 資料 - 優先使用傳入的，否則從 Service 獲取 (如果 Service 存在)
+        'groups': groups if groups is not None else (member_service.groups if member_service else {}),
+        'group_schedules': group_schedules if group_schedules is not None else (schedule_service.group_schedules if schedule_service else {}),
+        'group_messages': group_messages if group_messages is not None else (member_service.group_messages if member_service else {}),
+        'base_date': base_date if base_date is not None else (member_service.base_date if member_service else None),
+        # 回調函數
         'reminder_callback': reminder_callback,
         'update_schedule': update_schedule,
         'update_member_schedule': update_member_schedule,
