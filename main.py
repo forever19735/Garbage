@@ -9,6 +9,8 @@ import os
 import json
 import requests
 import firebase_service
+import re
+from difflib import SequenceMatcher
 
 # 載入 .env 檔案中的環境變數（僅在本地開發時使用）
 try:
@@ -17,6 +19,240 @@ try:
 except ImportError:
     # 在生產環境中（如 Railway）沒有 python-dotenv，直接忽略
     pass
+
+# ===== UX 增強模組 =====
+
+# 指令別名映射表（中文 -> 英文）
+COMMAND_ALIASES = {
+    '@設定時間': '@time',
+    '@設定星期': '@day',
+    '@設定排程': '@cron',
+    '@設定成員': '@week',
+    '@設定文案': '@message',
+    '@查看排程': '@schedule',
+    '@查看成員': '@members',
+    '@查看狀態': '@status',
+    '@幫助': '@help',
+    '@說明': '@help',
+    '@快速設定': '@quickstart',
+    '@重置': '@reset_all',
+}
+
+# 所有可用指令列表（用於模糊匹配）
+AVAILABLE_COMMANDS = [
+    '@schedule', '@members', '@time', '@day', '@cron', '@week',
+    '@addmember', '@removemember', '@message', '@help', '@status',
+    '@firebase', '@backup', '@reset_date', '@clear_week', '@clear_members',
+    '@clear_groups', '@reset_all', '@debug_env', '@quickstart'
+]
+
+# 錯誤訊息範本
+ERROR_TEMPLATES = {
+    'time_format': "❌ 時間格式錯誤\n📍 您輸入的：{input}\n⚠️ 問題：{issue}\n✅ 正確格式：@time 18:30\n💡 範例：@time 09:00 或 @time 17:30",
+    'hour_range': "❌ 小時超出範圍\n📍 您輸入的小時：{hour}\n⚠️ 小時必須在 0-23 之間\n✅ 正確範例：@time 18:30",
+    'minute_range': "❌ 分鐘超出範圍\n📍 您輸入的分鐘：{minute}\n⚠️ 分鐘必須在 0-59 之間\n✅ 正確範例：@time 18:30",
+    'day_format': "❌ 星期格式錯誤\n📍 您輸入的：{input}\n⚠️ 支援的星期：mon, tue, wed, thu, fri, sat, sun\n✅ 正確範例：@day mon,thu 或 @day mon,wed,fri",
+    'week_format': "❌ 週數格式錯誤\n📍 您輸入的：{input}\n⚠️ 週數必須是正整數（1, 2, 3...）\n✅ 正確範例：@week 1 Alice,Bob",
+    'cron_format': "❌ 排程格式錯誤\n📍 您輸入的：{input}\n⚠️ 正確格式：@cron 星期 時:分\n✅ 正確範例：@cron mon,thu 18:30",
+    'unknown_command': "❓ 找不到指令「{command}」\n\n{suggestions}\n💡 輸入 @help 查看所有指令",
+}
+
+def normalize_command(text):
+    """
+    標準化指令：將中文別名轉換為英文指令
+    
+    Args:
+        text (str): 使用者輸入的文字
+        
+    Returns:
+        str: 標準化後的指令
+    """
+    text = text.strip()
+    
+    # 檢查是否有中文別名
+    for alias, command in COMMAND_ALIASES.items():
+        if text.startswith(alias):
+            # 替換別名為標準指令
+            return text.replace(alias, command, 1)
+    
+    return text
+
+def calculate_similarity(str1, str2):
+    """
+    計算兩個字串的相似度
+    
+    Args:
+        str1 (str): 第一個字串
+        str2 (str): 第二個字串
+        
+    Returns:
+        float: 相似度 (0-1)
+    """
+    return SequenceMatcher(None, str1.lower(), str2.lower()).ratio()
+
+def suggest_commands(input_command, max_suggestions=3):
+    """
+    根據輸入的錯誤指令，建議相似的正確指令
+    
+    Args:
+        input_command (str): 使用者輸入的指令
+        max_suggestions (int): 最多建議數量
+        
+    Returns:
+        str: 格式化的建議訊息
+    """
+    # 提取指令部分（去除參數）
+    command_part = input_command.split()[0] if input_command else ''
+    
+    # 計算與所有可用指令的相似度
+    similarities = []
+    for cmd in AVAILABLE_COMMANDS:
+        similarity = calculate_similarity(command_part, cmd)
+        if similarity > 0.4:  # 只考慮相似度 > 0.4 的指令
+            similarities.append((cmd, similarity))
+    
+    # 按相似度排序
+    similarities.sort(key=lambda x: x[1], reverse=True)
+    
+    # 生成建議訊息
+    if similarities:
+        suggestions = []
+        for i, (cmd, _) in enumerate(similarities[:max_suggestions], 1):
+            # 取得指令說明
+            cmd_desc = get_command_description(cmd)
+            suggestions.append(f"{i}️⃣ {cmd} - {cmd_desc}")
+        
+        return "💡 您是否想要：\n" + "\n".join(suggestions)
+    else:
+        return "💡 常用指令：\n1️⃣ @schedule - 查看排程\n2️⃣ @members - 查看成員\n3️⃣ @help - 查看幫助"
+
+def get_command_description(command):
+    """
+    取得指令的簡短描述
+    
+    Args:
+        command (str): 指令名稱
+        
+    Returns:
+        str: 指令描述
+    """
+    descriptions = {
+        '@schedule': '查看推播排程',
+        '@members': '查看成員輪值表',
+        '@time': '設定推播時間',
+        '@day': '設定推播星期',
+        '@cron': '設定排程（星期+時間）',
+        '@week': '設定週成員',
+        '@addmember': '添加成員',
+        '@removemember': '移除成員',
+        '@message': '設定自訂文案',
+        '@help': '查看幫助',
+        '@status': '查看系統狀態',
+        '@firebase': 'Firebase 狀態',
+        '@backup': '建立備份',
+        '@reset_date': '重置基準日期',
+        '@clear_week': '清空指定週',
+        '@clear_members': '清空所有成員',
+        '@clear_groups': '清空群組',
+        '@reset_all': '重置所有資料',
+        '@debug_env': '環境變數診斷',
+        '@quickstart': '快速設定',
+    }
+    return descriptions.get(command, '未知指令')
+
+def parse_time_flexible(time_str):
+    """
+    彈性解析時間字串，支援多種格式
+    
+    Args:
+        time_str (str): 時間字串
+        
+    Returns:
+        tuple: (hour, minute, error_message) 或 (None, None, error_message)
+    """
+    time_str = time_str.strip()
+    
+    # 支援的格式：HH:MM, HH MM, HHMM
+    patterns = [
+        r'^(\d{1,2}):(\d{2})$',      # 18:30
+        r'^(\d{1,2})\s+(\d{2})$',    # 18 30
+        r'^(\d{2})(\d{2})$',         # 1830
+    ]
+    
+    for pattern in patterns:
+        match = re.match(pattern, time_str)
+        if match:
+            try:
+                hour = int(match.group(1))
+                minute = int(match.group(2))
+                
+                # 驗證範圍
+                if not (0 <= hour <= 23):
+                    return None, None, ERROR_TEMPLATES['hour_range'].format(hour=hour)
+                if not (0 <= minute <= 59):
+                    return None, None, ERROR_TEMPLATES['minute_range'].format(minute=minute)
+                
+                return hour, minute, None
+            except ValueError:
+                pass
+    
+    # 無法解析
+    return None, None, ERROR_TEMPLATES['time_format'].format(
+        input=time_str,
+        issue="無法識別的時間格式"
+    )
+
+def parse_members_flexible(members_str):
+    """
+    彈性解析成員列表，支援多種分隔符
+    
+    Args:
+        members_str (str): 成員字串
+        
+    Returns:
+        list: 成員列表
+    """
+    # 支援的分隔符：逗號、空格、頓號、分號
+    # 先統一替換為逗號
+    members_str = members_str.replace('、', ',')
+    members_str = members_str.replace('；', ',')
+    members_str = members_str.replace(';', ',')
+    
+    # 如果沒有逗號，嘗試用空格分隔
+    if ',' not in members_str:
+        members = members_str.split()
+    else:
+        members = members_str.split(',')
+    
+    # 清理並過濾空字串
+    members = [m.strip() for m in members if m.strip()]
+    
+    return members
+
+def format_success_message(action, details, next_steps=None):
+    """
+    格式化成功訊息，包含設定摘要和下一步建議
+    
+    Args:
+        action (str): 執行的動作
+        details (dict): 設定詳情
+        next_steps (list): 下一步建議（可選）
+        
+    Returns:
+        str: 格式化的成功訊息
+    """
+    message = f"✅ {action}\n\n📋 設定摘要：\n"
+    
+    for key, value in details.items():
+        message += f"  • {key}：{value}\n"
+    
+    if next_steps:
+        message += "\n💡 下一步：\n"
+        for step in next_steps:
+            message += f"  • {step}\n"
+    
+    return message.strip()
+
 
 # ===== 統一資料管理類別 =====
 class DataManager:
@@ -939,7 +1175,7 @@ def get_help_message(category=None):
     取得幫助訊息
     
     Args:
-        category (str): 指定類別 ('schedule', 'members', 'groups')
+        category (str): 指定類別 ('schedule', 'members', 'groups', 'message')
         
     Returns:
         str: 格式化的幫助訊息
@@ -952,22 +1188,22 @@ def get_help_message(category=None):
 @schedule - 顯示目前推播排程
 
 ⚙️ 設定排程：
-@time HH:MM - 設定推播時間
-範例：@time 18:30
-
-@day 星期 - 設定推播星期
-範例：@day mon,thu
-
-@cron 星期 時 分 - 同時設定星期和時間
-範例：@cron tue,fri 20 15
+@time 18:30 - 設定推播時間
+@day mon,thu - 設定推播星期  
+@cron mon,thu 18:30 - 同時設定星期和時間
 
 📋 支援的星期格式：
 mon, tue, wed, thu, fri, sat, sun
 
+💡 時間格式支援：
+• 18:30（推薦）
+• 1830
+• 18 30
+
 💡 注意事項：
-- 所有時間都是台北時間 (Asia/Taipei)
-- 設定後會立即顯示下次執行時間
-- 可隨時修改排程設定"""
+• 所有時間都是台北時間 (Asia/Taipei)
+• 設定後會立即顯示下次執行時間
+• 可隨時修改排程設定"""
 
     elif category == "members":
         return """👥 成員管理指令
@@ -976,49 +1212,35 @@ mon, tue, wed, thu, fri, sat, sun
 @members - 顯示完整輪值表
 
 ⚙️ 管理成員：
-@week 週數 成員1,成員2 - 設定整週成員
-範例：@week 1 Alice,Bob,Charlie
+@week 1 Alice,Bob - 設定第1週成員
+@addmember 1 Charlie - 添加成員到第1週
+@removemember 1 Alice - 從第1週移除成員
 
-@addmember 週數 成員名 - 添加成員到指定週
-範例：@addmember 2 David
+💡 成員格式支援：
+• Alice,Bob（逗號）
+• Alice Bob（空格）
+• Alice、Bob（頓號）
 
-@removemember 週數 成員名 - 從指定週移除成員
-範例：@removemember 1 Alice
-
-�️ 清空功能：
-@clear_week 週數 - 清空指定週的成員
-範例：@clear_week 1
-
+🗑️ 清空功能：
+@clear_week 1 - 清空第1週的成員
 @clear_members - 清空所有週的成員安排
 
-�💡 提示：
-- 週數從 1 開始
-- 成員名稱支援中文和表情符號
-- 用逗號分隔多個成員，不要加空格"""
+💡 提示：
+• 週數從 1 開始
+• 成員名稱支援中文和表情符號"""
 
     elif category == "groups":
         return """📱 群組管理指令
 
-⚙️ 管理群組：
+⚙️ 自動管理：
 💡 將 Bot 加入群組會自動記錄群組 ID
-💡 在想要接收提醒的群組中輸入此指令
+💡 在想要接收提醒的群組中輸入指令即可
 
 📊 群組資訊說明：
-- Bot 加入群組時會自動記錄
-- 支援多個群組同時接收提醒
-- 群組 ID 以 'C' 開頭"""
-
-    elif category == "test":
-        return """🧪 查看和調試指令
-
-📊 查看資訊：
-@schedule - 排程資訊
-@members - 成員輪值表
-
-🆘 獲取幫助：
-@help - 顯示所有指令
-@help 類別 - 顯示特定類別指令
-類別：schedule, members, groups, message"""
+• Bot 加入群組時會自動記錄
+• 支援多個群組同時接收提醒
+• 每個群組可設定獨立的排程和成員
+• 群組 ID 以 'C' 開頭"""
 
     elif category == "message":
         return """📝 自訂文案設定指令
@@ -1037,62 +1259,44 @@ mon, tue, wed, thu, fri, sat, sun
 @message 📋 今天 {date} ({weekday}) 輪到 {name} 值日！
 @message 🧹 {name}，該打掃辦公室了！({date})
 @message ⚡ {weekday} 提醒：{name} 負責設備檢查
-@message 🚮 垃圾收集日：{name} 請記得收垃圾 ({date})
-
-🔄 管理文案：
-- 每個群組可設定獨立的提醒文案
-- 文案會自動儲存到雲端
-- 支援表情符號和自訂格式
-- 可隨時恢復預設文案
 
 💡 使用建議：
-- 根據不同場景自訂文案（值日、清潔、檢查等）
-- 使用表情符號讓提醒更生動
-- 善用佔位符讓文案更個人化"""
+• 根據不同場景自訂文案（值日、清潔、檢查等）
+• 使用表情符號讓提醒更生動
+• 善用佔位符讓文案更個人化"""
 
-    else:  # 顯示所有指令概覽
-        return """🤖 輪值提醒 Bot 指令大全
+    else:  # 顯示簡化的總覽
+        return """🤖 輪值提醒 Bot 指令
 
- 常用指令：
+🚀 快速開始
+@quickstart - 互動式快速設定（推薦新手）
+
+📊 常用指令
 @schedule - 查看推播排程
 @members - 查看成員輪值表
 
-⚙️ 排程設定：
-@time 18:30 - 設定推播時間
-@day mon,thu - 設定推播星期  
-@cron mon,thu 18 30 - 同時設定星期和時間
-
-👥 成員管理：
+⚙️ 基本設定
+@cron mon,thu 18:30 - 設定排程（星期+時間）
 @week 1 Alice,Bob - 設定第1週成員
-@addmember 1 Charlie - 添加成員到第1週
-@removemember 1 Alice - 從第1週移除成員
+@message 自訂文案 - 設定提醒文案（選用）
 
-📝 文案設定：
-@message 自訂提醒文案 - 設定專屬提醒訊息
-@message reset - 恢復預設文案
+🌏 中文指令
+@設定排程 mon,thu 18:30
+@設定成員 1 Alice,Bob
+@查看排程
+@查看成員
 
-📋 詳細查看：
-@help schedule - 排程管理指令說明
-@help members - 成員管理指令說明  
-@help groups - 群組管理指令說明
-@help message - 自訂文案設定說明
+📚 詳細說明
+@help schedule - 排程管理
+@help members - 成員管理  
+@help groups - 群組管理
+@help message - 文案設定
 
-💡 使用提示：
-- 所有時間都是台北時間
-- 群組 ID 會自動記住
-- 支援多群組推播
-- 成員輪值基於自然週（週一到週日）計算
-- 所有設定都會持久化儲存
-- 第一次設定成員時會自動記錄基準日期
-- 週數按自然週循環，每個星期一自動切換
-
-🏃‍♂️ 新手快速開始：
-1. 將 Bot 加入群組 (自動記錄群組)
-2. 輸入 @cron mon,thu 18:00 (設定提醒星期和時間)
-3. 輸入 @week 1 姓名1,姓名2 (設定第幾週成員)
-4. 輸入 @message 今天輪到{name}值日！ (選用：自訂文案)
-
-❓ 需要詳細說明請輸入：@help 類別名稱"""
+💡 使用提示
+• 支援中文指令別名
+• 時間格式彈性（18:30 或 1830）
+• 成員分隔符彈性（逗號、空格、頓號）
+• 所有設定都會自動儲存到雲端"""
 
 def get_command_examples():
     """
@@ -1678,93 +1882,157 @@ def callback():
 # ===== 處理訊息事件 =====
 @handler.add(MessageEvent)
 def handle_message(event):
+    # 標準化指令（支援中文別名）
+    if hasattr(event.message, 'text'):
+        original_text = event.message.text.strip()
+        normalized_text = normalize_command(original_text)
+        
+        # 如果標準化後不同，表示使用了別名
+        if normalized_text != original_text:
+            print(f"指令別名轉換: {original_text} -> {normalized_text}")
+            # 暫時替換 event.message.text 以便後續處理
+            event.message.text = normalized_text
+    
     # 使用者設定推播星期、時、分指令
     if event.message.text.strip().startswith("@cron"):
-        import re
-        m = re.match(r"@cron ([a-z,]+) (\d{1,2})[: ](\d{1,2})", event.message.text.strip())
-        if m:
-            days = m.group(1)
-            hour = int(m.group(2))
-            minute = int(m.group(3))
+        parts = event.message.text.strip().split()
+        
+        if len(parts) < 3:
+            from linebot.v3.messaging.models import ReplyMessageRequest
+            req = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=ERROR_TEMPLATES['cron_format'].format(input=event.message.text.strip()))]
+            )
+            messaging_api.reply_message(req)
+            return
+        
+        days = parts[1]
+        time_str = parts[2]
+        
+        # 使用彈性時間解析（支援 HH:MM 格式）
+        hour, minute, error_msg = parse_time_flexible(time_str)
+        
+        if error_msg:
+            from linebot.v3.messaging.models import ReplyMessageRequest
+            req = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=error_msg)]
+            )
+            messaging_api.reply_message(req)
+            return
+        
+        group_id = get_group_id_from_event(event)
+        
+        if group_id:
+            # 更新該群組的排程設定
+            result = update_schedule(group_id, days, hour, minute)
             
-            # 驗證時間範圍
-            if not (0 <= hour <= 23):
-                from linebot.v3.messaging.models import ReplyMessageRequest
-                req = ReplyMessageRequest(
-                    reply_token=event.reply_token,
-                    messages=[TextMessage(text="小時必須在 0-23 之間")]
-                )
-                messaging_api.reply_message(req)
-                return
+            if result["success"]:
+                # 格式化星期顯示
+                day_mapping = {
+                    "mon": "週一", "tue": "週二", "wed": "週三", "thu": "週四",
+                    "fri": "週五", "sat": "週六", "sun": "週日"
+                }
+                day_list = [day_mapping.get(d.strip(), d.strip()) for d in days.split(",")]
+                days_chinese = "、".join(day_list)
                 
-            if not (0 <= minute <= 59):
-                from linebot.v3.messaging.models import ReplyMessageRequest
-                req = ReplyMessageRequest(
-                    reply_token=event.reply_token,
-                    messages=[TextMessage(text="分鐘必須在 0-59 之間")]
+                message = format_success_message(
+                    "推播排程設定成功",
+                    {
+                        "時間": f"{hour:02d}:{minute:02d} (台北時間)",
+                        "星期": days_chinese,
+                        "下次推播": result['schedule']['next_run']
+                    },
+                    [
+                        "設定輪值成員：@week 1 姓名1,姓名2",
+                        "查看完整設定：@schedule"
+                    ]
                 )
-                messaging_api.reply_message(req)
-                return
-            
-            group_id = get_group_id_from_event(event)
-            
-            if group_id:
-                # 更新該群組的排程設定
-                result = update_schedule(group_id, days, hour, minute)
-                
-                if result["success"]:
-                    message = f"✅ 群組推播時間已更新為 {days} {hour:02d}:{minute:02d} (台北時間)\n⏰ {result['schedule']['next_run']}"
-                else:
-                    message = f"❌ 設定失敗: {result['message']}"
             else:
-                message = "❌ 無法取得群組資訊"
-            
-            from linebot.v3.messaging.models import ReplyMessageRequest
-            req = ReplyMessageRequest(
-                reply_token=event.reply_token,
-                messages=[TextMessage(text=message)]
-            )
-            messaging_api.reply_message(req)
+                message = f"❌ 設定失敗: {result['message']}"
         else:
-            from linebot.v3.messaging.models import ReplyMessageRequest
-            req = ReplyMessageRequest(
-                reply_token=event.reply_token,
-                messages=[TextMessage(text="格式錯誤，請輸入 @cron mon,thu 18 30 或 @cron mon,thu 18:30")]
-            )
-            messaging_api.reply_message(req)
+            message = "❌ 無法取得群組資訊\n💡 請在群組中使用此指令"
+        
+        from linebot.v3.messaging.models import ReplyMessageRequest
+        req = ReplyMessageRequest(
+            reply_token=event.reply_token,
+            messages=[TextMessage(text=message)]
+        )
+        messaging_api.reply_message(req)
 
     # 使用者設定推播星期指令
     if event.message.text.strip().startswith("@day"):
-        import re
-        m = re.match(r"@day ([a-z,]+)", event.message.text.strip())
-        if m:
-            days = m.group(1)
-            group_id = get_group_id_from_event(event)
+        parts = event.message.text.strip().split(maxsplit=1)
+        
+        if len(parts) < 2:
+            from linebot.v3.messaging.models import ReplyMessageRequest
+            req = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text="❌ 缺少星期參數\n✅ 正確格式：@day mon,thu\n💡 範例：@day mon,wed,fri")]
+            )
+            messaging_api.reply_message(req)
+            return
+        
+        days = parts[1]
+        
+        # 驗證星期格式
+        valid_days = {'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'}
+        day_list = [d.strip() for d in days.split(',')]
+        invalid_days = [d for d in day_list if d not in valid_days]
+        
+        if invalid_days:
+            from linebot.v3.messaging.models import ReplyMessageRequest
+            req = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=ERROR_TEMPLATES['day_format'].format(input=days))]
+            )
+            messaging_api.reply_message(req)
+            return
+        
+        group_id = get_group_id_from_event(event)
+        
+        if group_id:
+            # 更新該群組的排程設定
+            result = update_schedule(group_id, days=days)
             
-            if group_id:
-                # 更新該群組的排程設定
-                result = update_schedule(group_id, days=days)
+            if result["success"]:
+                # 格式化星期顯示
+                day_mapping = {
+                    "mon": "週一", "tue": "週二", "wed": "週三", "thu": "週四",
+                    "fri": "週五", "sat": "週六", "sun": "週日"
+                }
+                day_list_chinese = [day_mapping.get(d.strip(), d.strip()) for d in days.split(",")]
+                days_chinese = "、".join(day_list_chinese)
                 
-                if result["success"]:
-                    message = f"✅ 群組推播星期已更新為 {days}\n⏰ {result['schedule']['next_run']}"
-                else:
-                    message = f"❌ 設定失敗: {result['message']}"
+                # 取得時間設定
+                schedule_config = group_schedules.get(group_id, {})
+                hour = schedule_config.get("hour", 17)
+                minute = schedule_config.get("minute", 10)
+                
+                message = format_success_message(
+                    "推播星期設定成功",
+                    {
+                        "星期": days_chinese,
+                        "時間": f"{hour:02d}:{minute:02d} (台北時間)",
+                        "下次推播": result['schedule']['next_run']
+                    },
+                    [
+                        "設定輪值成員：@week 1 姓名1,姓名2",
+                        "修改推播時間：@time 18:30",
+                        "查看完整設定：@schedule"
+                    ]
+                )
             else:
-                message = "❌ 無法取得群組資訊"
-            
-            from linebot.v3.messaging.models import ReplyMessageRequest
-            req = ReplyMessageRequest(
-                reply_token=event.reply_token,
-                messages=[TextMessage(text=message)]
-            )
-            messaging_api.reply_message(req)
+                message = f"❌ 設定失敗: {result['message']}"
         else:
-            from linebot.v3.messaging.models import ReplyMessageRequest
-            req = ReplyMessageRequest(
-                reply_token=event.reply_token,
-                messages=[TextMessage(text="格式錯誤，請輸入 @day mon,thu")]
-            )
-            messaging_api.reply_message(req)
+            message = "❌ 無法取得群組資訊\n💡 請在群組中使用此指令"
+        
+        from linebot.v3.messaging.models import ReplyMessageRequest
+        req = ReplyMessageRequest(
+            reply_token=event.reply_token,
+            messages=[TextMessage(text=message)]
+        )
+        messaging_api.reply_message(req)
 
     if getattr(event.message, "type", None) == "text":
         print("收到訊息:", event.message.text)
@@ -1772,57 +2040,76 @@ def handle_message(event):
 
         # 使用者設定推播時間指令
         if event.message.text.strip().startswith("@time"):
-            import re
-            m = re.match(r"@time (\d{1,2}):(\d{2})", event.message.text.strip())
-            if m:
-                hour = int(m.group(1))
-                minute = int(m.group(2))
+            parts = event.message.text.strip().split(maxsplit=1)
+            
+            if len(parts) < 2:
+                from linebot.v3.messaging.models import ReplyMessageRequest
+                req = ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text="❌ 缺少時間參數\n✅ 正確格式：@time 18:30\n💡 範例：@time 09:00 或 @time 17:30")]
+                )
+                messaging_api.reply_message(req)
+                return
+            
+            time_str = parts[1]
+            
+            # 使用彈性時間解析
+            hour, minute, error_msg = parse_time_flexible(time_str)
+            
+            if error_msg:
+                # 顯示智能錯誤訊息
+                from linebot.v3.messaging.models import ReplyMessageRequest
+                req = ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text=error_msg)]
+                )
+                messaging_api.reply_message(req)
+                return
+            
+            group_id = get_group_id_from_event(event)
+            
+            if group_id:
+                # 更新該群組的排程設定
+                result = update_schedule(group_id, hour=hour, minute=minute)
                 
-                # 驗證時間範圍
-                if not (0 <= hour <= 23):
-                    from linebot.v3.messaging.models import ReplyMessageRequest
-                    req = ReplyMessageRequest(
-                        reply_token=event.reply_token,
-                        messages=[TextMessage(text="小時必須在 0-23 之間")]
-                    )
-                    messaging_api.reply_message(req)
-                    return
+                if result["success"]:
+                    # 取得星期設定
+                    schedule_config = group_schedules.get(group_id, {})
+                    days = schedule_config.get("days", "mon,thu")
                     
-                if not (0 <= minute <= 59):
-                    from linebot.v3.messaging.models import ReplyMessageRequest
-                    req = ReplyMessageRequest(
-                        reply_token=event.reply_token,
-                        messages=[TextMessage(text="分鐘必須在 0-59 之間")]
-                    )
-                    messaging_api.reply_message(req)
-                    return
-                
-                group_id = get_group_id_from_event(event)
-                
-                if group_id:
-                    # 更新該群組的排程設定
-                    result = update_schedule(group_id, hour=hour, minute=minute)
+                    # 格式化星期顯示
+                    day_mapping = {
+                        "mon": "週一", "tue": "週二", "wed": "週三", "thu": "週四",
+                        "fri": "週五", "sat": "週六", "sun": "週日"
+                    }
+                    day_list = [day_mapping.get(d.strip(), d.strip()) for d in days.split(",")]
+                    days_chinese = "、".join(day_list)
                     
-                    if result["success"]:
-                        message = f"✅ 群組推播時間已更新為 {hour:02d}:{minute:02d} (台北時間)\n⏰ {result['schedule']['next_run']}"
-                    else:
-                        message = f"❌ 設定失敗: {result['message']}"
+                    # 使用增強的成功訊息
+                    message = format_success_message(
+                        "推播時間設定成功",
+                        {
+                            "時間": f"{hour:02d}:{minute:02d} (台北時間)",
+                            "星期": days_chinese,
+                            "下次推播": result['schedule']['next_run']
+                        },
+                        [
+                            "設定輪值成員：@week 1 姓名1,姓名2",
+                            "修改推播星期：@day mon,thu",
+                            "查看完整設定：@schedule"
+                        ]
+                    )
                 else:
-                    message = "❌ 無法取得群組資訊"
-                
-                from linebot.v3.messaging.models import ReplyMessageRequest
-                req = ReplyMessageRequest(
-                    reply_token=event.reply_token,
-                    messages=[TextMessage(text=message)]
-                )
-                messaging_api.reply_message(req)
+                    message = f"❌ 設定失敗: {result['message']}"
             else:
-                from linebot.v3.messaging.models import ReplyMessageRequest
-                req = ReplyMessageRequest(
-                    reply_token=event.reply_token,
-                    messages=[TextMessage(text="格式錯誤，請輸入 @time HH:MM")]
-                )
-                messaging_api.reply_message(req)
+                message = "❌ 無法取得群組資訊\n💡 請在群組中使用此指令"
+            
+            from linebot.v3.messaging.models import ReplyMessageRequest
+            req = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=message)]
+            )
+            messaging_api.reply_message(req)
 
         # # 顯示目前已設定的群組列表
         # if event.message.text.strip() == "@groups":
@@ -1876,6 +2163,124 @@ def handle_message(event):
                 response_text = schedule_summary
             else:
                 response_text = "❌ 無法取得群組資訊"
+            
+            from linebot.v3.messaging.models import ReplyMessageRequest
+            req = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=response_text)]
+            )
+            messaging_api.reply_message(req)
+        
+        # 快速設定指令（互動式引導）
+        if event.message.text.strip() == "@quickstart" or event.message.text.strip() == "@快速設定":
+            group_id = get_group_id_from_event(event)
+            
+            if not group_id:
+                response_text = "❌ 請在群組中使用此指令"
+            else:
+                # 檢查當前設定狀態
+                schedule_config = group_schedules.get(group_id, {})
+                group_data = groups.get(group_id, {})
+                
+                has_schedule = bool(schedule_config)
+                has_members = bool(group_data)
+                
+                if has_schedule and has_members:
+                    # 已完成設定
+                    response_text = """✅ 您已完成基本設定！
+
+📋 當前設定：
+"""
+                    # 顯示排程
+                    days = schedule_config.get("days", "")
+                    hour = schedule_config.get("hour", 0)
+                    minute = schedule_config.get("minute", 0)
+                    
+                    day_mapping = {
+                        "mon": "週一", "tue": "週二", "wed": "週三", "thu": "週四",
+                        "fri": "週五", "sat": "週六", "sun": "週日"
+                    }
+                    day_list = [day_mapping.get(d.strip(), d.strip()) for d in days.split(",")]
+                    days_chinese = "、".join(day_list)
+                    
+                    response_text += f"⏰ 推播時間：{days_chinese} {hour:02d}:{minute:02d}\n"
+                    response_text += f"👥 輪值週數：{len(group_data)} 週\n\n"
+                    
+                    response_text += """💡 您可以：
+• 查看排程：@schedule
+• 查看成員：@members
+• 修改時間：@time 18:30
+• 修改星期：@day mon,thu
+• 設定文案：@message 自訂文案"""
+                    
+                elif has_schedule:
+                    # 已設定排程，未設定成員
+                    response_text = """🚀 快速設定 - 步驟 2/2
+
+✅ 推播排程已設定
+
+📝 接下來請設定輪值成員：
+
+方法一：直接輸入
+@week 1 成員1,成員2
+
+方法二：範例
+@week 1 Alice,Bob
+@week 2 Charlie,David
+
+💡 提示：
+• 支援多種分隔符（逗號、空格、頓號）
+• 可設定多週輪值
+• 設定完成後輸入 @members 查看"""
+                    
+                elif has_members:
+                    # 已設定成員，未設定排程
+                    response_text = """🚀 快速設定 - 步驟 2/2
+
+✅ 輪值成員已設定
+
+📝 接下來請設定推播排程：
+
+方法一：一次設定（推薦）
+@cron mon,thu 18:30
+
+方法二：分別設定
+@time 18:30
+@day mon,thu
+
+💡 提示：
+• 時間格式：18:30 或 1830
+• 星期格式：mon,tue,wed,thu,fri,sat,sun
+• 設定完成後輸入 @schedule 查看"""
+                    
+                else:
+                    # 尚未設定
+                    response_text = """🚀 快速設定指南
+
+歡迎使用輪值提醒 Bot！讓我們用 3 個步驟完成設定：
+
+📝 步驟 1：設定推播排程
+@cron mon,thu 18:30
+（在週一、週四的 18:30 推播）
+
+📝 步驟 2：設定輪值成員
+@week 1 Alice,Bob
+@week 2 Charlie,David
+（第1週：Alice、Bob，第2週：Charlie、David）
+
+📝 步驟 3：自訂文案（選用）
+@message 今天輪到{name}值日！
+
+💡 快速範例：
+1️⃣ @cron mon,thu 18:30
+2️⃣ @week 1 小明,小華
+3️⃣ @week 2 小美,小強
+
+✅ 完成後輸入 @schedule 和 @members 查看設定
+
+🌏 支援中文指令：
+@設定排程 mon,thu 18:30
+@設定成員 1 小明,小華"""
             
             from linebot.v3.messaging.models import ReplyMessageRequest
             req = ReplyMessageRequest(
@@ -2117,31 +2522,78 @@ def handle_message(event):
         
         # 設定指定週的成員 - 格式: @week 1 成員1,成員2
         if event.message.text.strip().startswith("@week"):
-            import re
-            m = re.match(r"@week (\d+) (.+)", event.message.text.strip())
-            if m:
-                week_num = int(m.group(1))
-                members_str = m.group(2)
-                members = [member.strip() for member in members_str.split(",") if member.strip()]
-                
-                # 取得當前群組ID
-                group_id = getattr(event.source, 'group_id', None)
-                
-                result = update_member_schedule(week_num, members, group_id)
-                
+            parts = event.message.text.strip().split(maxsplit=2)
+            
+            if len(parts) < 3:
                 from linebot.v3.messaging.models import ReplyMessageRequest
                 req = ReplyMessageRequest(
                     reply_token=event.reply_token,
-                    messages=[TextMessage(text=f"{'✅' if result['success'] else '❌'} {result['message']}")]
+                    messages=[TextMessage(text=ERROR_TEMPLATES['week_format'].format(input=event.message.text.strip()))]
                 )
                 messaging_api.reply_message(req)
+                return
+            
+            try:
+                week_num = int(parts[1])
+            except ValueError:
+                from linebot.v3.messaging.models import ReplyMessageRequest
+                req = ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text=ERROR_TEMPLATES['week_format'].format(input=event.message.text.strip()))]
+                )
+                messaging_api.reply_message(req)
+                return
+            
+            members_str = parts[2]
+            
+            # 使用彈性成員解析（支援多種分隔符）
+            members = parse_members_flexible(members_str)
+            
+            if not members:
+                from linebot.v3.messaging.models import ReplyMessageRequest
+                req = ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text="❌ 成員列表不能為空\n✅ 正確範例：@week 1 Alice,Bob\n💡 支援分隔符：逗號、空格、頓號")]
+                )
+                messaging_api.reply_message(req)
+                return
+            
+            # 取得當前群組ID
+            group_id = getattr(event.source, 'group_id', None)
+            
+            result = update_member_schedule(week_num, members, group_id)
+            
+            if result['success']:
+                # 取得排程資訊
+                schedule_config = group_schedules.get(group_id, {}) if group_id else {}
+                has_schedule = bool(schedule_config)
+                
+                next_steps = []
+                if not has_schedule:
+                    next_steps.append("設定推播時間：@cron mon,thu 18:30")
+                next_steps.extend([
+                    "查看輪值表：@members",
+                    "查看排程：@schedule"
+                ])
+                
+                message = format_success_message(
+                    f"第 {week_num} 週成員設定成功",
+                    {
+                        "週數": f"第 {week_num} 週",
+                        "成員": "、".join(members),
+                        "成員數": f"{len(members)} 人"
+                    },
+                    next_steps
+                )
             else:
-                from linebot.v3.messaging.models import ReplyMessageRequest
-                req = ReplyMessageRequest(
-                    reply_token=event.reply_token,
-                    messages=[TextMessage(text="格式錯誤，請輸入 @week 週數 成員1,成員2\n例如: @week 1 Alice,Bob")]
-                )
-                messaging_api.reply_message(req)
+                message = f"❌ {result['message']}"
+            
+            from linebot.v3.messaging.models import ReplyMessageRequest
+            req = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=message)]
+            )
+            messaging_api.reply_message(req)
         
         # 設定自訂文案 - 格式: @message 自訂提醒文案
         if event.message.text.strip().startswith("@message"):
@@ -2282,10 +2734,20 @@ def handle_message(event):
             else:
                 # @help 類別 - 顯示特定類別
                 category = parts[1].lower()
-                if category in ["schedule", "members", "groups"]:
+                # 支援中文類別
+                category_mapping = {
+                    "排程": "schedule",
+                    "成員": "members",
+                    "群組": "groups",
+                    "文案": "message",
+                    "訊息": "message"
+                }
+                category = category_mapping.get(category, category)
+                
+                if category in ["schedule", "members", "groups", "message"]:
                     help_text = get_help_message(category)
                 else:
-                    help_text = "❌ 未知類別，請輸入：\n@help schedule\n@help members\n@help groups\n@help examples"
+                    help_text = "❌ 未知類別\n\n💡 可用類別：\n• @help schedule（排程）\n• @help members（成員）\n• @help groups（群組）\n• @help message（文案）\n• @help examples（範例）"
             
             from linebot.v3.messaging.models import ReplyMessageRequest
             req = ReplyMessageRequest(
@@ -2293,6 +2755,34 @@ def handle_message(event):
                 messages=[TextMessage(text=help_text)]
             )
             messaging_api.reply_message(req)
+            return
+        
+        # 未知指令處理（必須放在最後）
+        if event.message.text.strip().startswith("@"):
+            # 檢查是否為已知指令
+            command_part = event.message.text.strip().split()[0]
+            
+            # 檢查是否在可用指令列表中
+            is_known = False
+            for known_cmd in AVAILABLE_COMMANDS:
+                if event.message.text.strip().startswith(known_cmd):
+                    is_known = True
+                    break
+            
+            # 如果不是已知指令，提供建議
+            if not is_known:
+                suggestions = suggest_commands(command_part)
+                message = ERROR_TEMPLATES['unknown_command'].format(
+                    command=command_part,
+                    suggestions=suggestions
+                )
+                
+                from linebot.v3.messaging.models import ReplyMessageRequest
+                req = ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text=message)]
+                )
+                messaging_api.reply_message(req)
 
 @handler.add(JoinEvent)
 def handle_join(event):
