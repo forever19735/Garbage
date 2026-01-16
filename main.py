@@ -1880,26 +1880,6 @@ def callback():
 
 
 # ===== 處理訊息事件 =====
-
-# 初始化命令處理器（全局）
-from commands import (
-    CommandHandler, TimeCommand, DayCommand, CronCommand, WeekCommand,
-    ScheduleCommand, MembersCommand, HelpCommand, QuickstartCommand
-)
-
-command_handler = CommandHandler()
-
-# 註冊所有命令處理器
-command_handler.register(TimeCommand(update_schedule, get_group_id_from_event, group_schedules))
-command_handler.register(DayCommand(update_schedule, get_group_id_from_event, group_schedules))
-command_handler.register(CronCommand(update_schedule, get_group_id_from_event))
-command_handler.register(WeekCommand(update_member_schedule, group_schedules))
-command_handler.register(ScheduleCommand(get_schedule_summary, get_group_id_from_event))
-command_handler.register(MembersCommand(get_member_schedule_summary))
-command_handler.register(HelpCommand(get_help_message, get_command_examples))
-command_handler.register(QuickstartCommand(get_group_id_from_event, group_schedules, groups))
-
-
 @handler.add(MessageEvent)
 def handle_message(event):
     # 標準化指令（支援中文別名）
@@ -1913,15 +1893,36 @@ def handle_message(event):
             # 暫時替換 event.message.text 以便後續處理
             event.message.text = normalized_text
     
-    # 嘗試使用命令處理器處理
-    response = command_handler.handle(event)
-    if response:
-        from linebot.v3.messaging.models import ReplyMessageRequest
-        req = ReplyMessageRequest(
-            reply_token=event.reply_token,
-            messages=[TextMessage(text=response)]
-        )
-        messaging_api.reply_message(req)
+    # 使用者設定推播星期、時、分指令
+    if event.message.text.strip().startswith("@cron"):
+        parts = event.message.text.strip().split()
+        
+        if len(parts) < 3:
+            from linebot.v3.messaging.models import ReplyMessageRequest
+            req = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=ERROR_TEMPLATES['cron_format'].format(input=event.message.text.strip()))]
+            )
+            messaging_api.reply_message(req)
+            return
+        
+        days = parts[1]
+        time_str = parts[2]
+        
+        # 使用彈性時間解析（支援 HH:MM 格式）
+        hour, minute, error_msg = parse_time_flexible(time_str)
+        
+        if error_msg:
+            from linebot.v3.messaging.models import ReplyMessageRequest
+            req = ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=error_msg)]
+            )
+            messaging_api.reply_message(req)
+            return
+        
+        group_id = get_group_id_from_event(event)
+        
         return
     
     # 如果 CommandHandler 沒有處理，顯示未知指令提示
@@ -1941,7 +1942,23 @@ def handle_message(event):
 
 
 # ===== 處理 Bot 加入群組事件 =====
-
+@handler.add(JoinEvent)
+def handle_join(event):
+    """處理 Bot 加入群組事件，自動記錄群組 ID"""
+    try:
+        # 取得群組 ID
+        group_id = event.source.group_id
+        
+        # 載入現有的群組 ID 列表
+        global group_ids
+        
+        # 檢查是否已經存在
+        if group_id not in group_ids:
+            group_ids.append(group_id)
+            save_group_ids()
+            
+            # 發送歡迎訊息並告知群組 ID 已記錄
+            welcome_msg = f"""🤖 歡迎使用輪值提醒 Bot！
 
 🚀 快速開始：
 @cron mon,thu 18:00 - 設定提醒星期和時間
