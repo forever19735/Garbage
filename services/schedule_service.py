@@ -54,6 +54,25 @@ class ScheduleService:
         """重新載入資料"""
         self._group_schedules = None
     
+    def initialize_jobs(self, reminder_callback):
+        """
+        初始化所有現有的排程任務
+        
+        Args:
+            reminder_callback: 發送提醒的回調函數
+        """
+        if not self.group_schedules:
+            return
+            
+        print(f"正在初始化 {len(self.group_schedules)} 個群組排程...")
+        for group_id, config in self.group_schedules.items():
+            days = config.get("days", "mon,thu")
+            hour = config.get("hour", 17)
+            minute = config.get("minute", 10)
+            
+            # 使用 update_schedule 來重建任務
+            self.update_schedule(group_id, days, hour, minute, reminder_callback)
+            
     def get_schedule_info(self, group_id: str = None) -> Dict[str, Any]:
         """
         取得排程資訊
@@ -178,7 +197,12 @@ class ScheduleService:
                     )
                 )
                 self.group_jobs[group_id] = job
-                next_run = job.next_run_time.strftime('%Y-%m-%d %H:%M:%S %Z') if job.next_run_time else "未知"
+                # Debug job object
+                # print(f"DEBUG JOB: {dir(job)}")
+                if hasattr(job, 'next_run_time'):
+                    next_run = job.next_run_time.strftime('%Y-%m-%d %H:%M:%S %Z') if job.next_run_time else "未知"
+                else:
+                    next_run = "無法取得 (屬性缺失)"
             else:
                 next_run = "排程器未初始化"
             
@@ -204,6 +228,8 @@ class ScheduleService:
             }
             
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             return {"success": False, "message": f"更新排程失敗: {str(e)}", "error": str(e)}
     
     def _validate_schedule_params(self, days: str, hour: int, minute: int) -> Dict[str, Any]:

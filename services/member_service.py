@@ -70,11 +70,44 @@ class MemberService:
     def base_date(self) -> Optional[date]:
         """取得基準日期"""
         if self._base_date is None:
-            self._base_date = self.data_manager.load_data('base_date', None)
+            loaded_date = self.data_manager.load_data('base_date', None)
+            
+            if loaded_date:
+                # 如果是字串，嘗試解析 ISO 格式
+                if isinstance(loaded_date, str):
+                    try:
+                        self._base_date = date.fromisoformat(loaded_date)
+                    except ValueError:
+                        # 舊格式或其他格式，嘗試 split
+                        try:
+                            # 假設是 "YYYY-MM-DD"
+                            parts = loaded_date.split('-')
+                            if len(parts) == 3:
+                                self._base_date = date(int(parts[0]), int(parts[1]), int(parts[2]))
+                        except:
+                            self._base_date = None
+                # 如果是 datetime (某些序列化庫可能返回 datetime)
+                elif hasattr(loaded_date, 'date'):
+                    self._base_date = loaded_date.date()
+                # 如果是 date
+                elif isinstance(loaded_date, date):
+                    self._base_date = loaded_date
+                # 如果是 dict (可能包含 date 欄位?)
+                elif isinstance(loaded_date, dict) and 'date' in loaded_date:
+                     pass # 暫不處理複雜 dict，視為 None 或錯誤
+            else:
+                self._base_date = None
+                
         return self._base_date
     
     @base_date.setter
     def base_date(self, value: Optional[date]):
+        # 確保儲存的是 date 物件，如果是字串則解析
+        if isinstance(value, str):
+            try:
+                value = date.fromisoformat(value)
+            except ValueError:
+                pass
         self._base_date = value
     
     def reload_data(self):
