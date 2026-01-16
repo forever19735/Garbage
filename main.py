@@ -113,7 +113,7 @@ def clear_all_group_ids():
     old_count = len(group_ids)
     old_ids = group_ids.copy()
     group_ids = []
-    save_group_ids()  # 立即儲存到檔案
+    firebase_repository.save_data('group_ids', group_ids)  # 立即儲存到檔案
     
     return {
         "success": True,
@@ -321,7 +321,7 @@ def add_line_group_id(group_id):
     
     # 添加到列表
     group_ids.append(group_id)
-    save_group_ids()  # 立即儲存到檔案
+    firebase_repository.save_data('group_ids', group_ids)  # 立即儲存到檔案
     return {
         "success": True, 
         "message": f"成功添加群組 ID: {group_id}",
@@ -342,7 +342,7 @@ def remove_line_group_id(group_id):
     
     if group_id in group_ids:
         group_ids.remove(group_id)
-        save_group_ids()  # 立即儲存到檔案
+        firebase_repository.save_data('group_ids', group_ids)  # 立即儲存到檔案
         return {
             "success": True,
             "message": f"成功移除群組 ID: {group_id}",
@@ -548,10 +548,6 @@ def initialize_group_schedules():
                 print(f"群組 {group_id} 排程任務重建成功")
             else:
                 print(f"群組 {group_id} 排程任務重建失敗: {result['message']}")
-            if result["success"]:
-                print(f"群組 {group_id} 排程任務重建成功")
-            else:
-                print(f"群組 {group_id} 排程任務重建失敗: {result['message']}")
 
 # 初始化排程
 initialize_group_schedules()
@@ -694,7 +690,7 @@ def handle_join(event):
         # 檢查是否已經存在
         if group_id not in group_ids:
             group_ids.append(group_id)
-            save_group_ids()
+            firebase_repository.save_data('group_ids', group_ids)
             
             # 發送歡迎訊息並告知群組 ID 已記錄
             welcome_msg = f"""🤖 歡迎使用輪值提醒 Bot！
@@ -734,7 +730,7 @@ def handle_leave(event):
         # 檢查並移除群組 ID
         if group_id in group_ids:
             group_ids.remove(group_id)
-            save_group_ids()
+            firebase_repository.save_data('group_ids', group_ids)
             print(f"Bot 離開群組，已移除群組 ID: {group_id}")
         else:
             print(f"Bot 離開未知群組: {group_id}")

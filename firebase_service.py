@@ -121,6 +121,10 @@ class FirebaseService:
     def save_base_date(self, base_date):
         if not self.is_available():
             return False
+            
+        if base_date is None:
+            return self.reset_base_date()
+            
         try:
             doc_ref = self.db.collection('bot_config').document('base_date')
             data = {'base_date': base_date.isoformat(), 'set_at': firestore.SERVER_TIMESTAMP}
