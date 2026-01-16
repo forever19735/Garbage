@@ -1880,26 +1880,6 @@ def callback():
 
 
 # ===== 處理訊息事件 =====
-
-# 初始化命令處理器（全局）
-from commands import (
-    CommandHandler, TimeCommand, DayCommand, CronCommand, WeekCommand,
-    ScheduleCommand, MembersCommand, HelpCommand, QuickstartCommand
-)
-
-command_handler = CommandHandler()
-
-# 註冊所有命令處理器
-command_handler.register(TimeCommand(update_schedule, get_group_id_from_event, group_schedules))
-command_handler.register(DayCommand(update_schedule, get_group_id_from_event, group_schedules))
-command_handler.register(CronCommand(update_schedule, get_group_id_from_event))
-command_handler.register(WeekCommand(update_member_schedule, group_schedules))
-command_handler.register(ScheduleCommand(get_schedule_summary, get_group_id_from_event))
-command_handler.register(MembersCommand(get_member_schedule_summary))
-command_handler.register(HelpCommand(get_help_message, get_command_examples))
-command_handler.register(QuickstartCommand(get_group_id_from_event, group_schedules, groups))
-
-
 @handler.add(MessageEvent)
 def handle_message(event):
     # 標準化指令（支援中文別名）
@@ -1913,19 +1893,8 @@ def handle_message(event):
             # 暫時替換 event.message.text 以便後續處理
             event.message.text = normalized_text
     
-    # 嘗試使用命令處理器處理
-    response = command_handler.handle(event)
-    if response:
-        from linebot.v3.messaging.models import ReplyMessageRequest
-        req = ReplyMessageRequest(
-            reply_token=event.reply_token,
-            messages=[TextMessage(text=response)]
-        )
-        messaging_api.reply_message(req)
-        return
-    
-    # 如果命令處理器沒有處理，繼續使用舊的處理邏輯（向後兼容）
-    # 以下是保留的舊指令處理邏輯...
+    # 使用者設定推播星期、時、分指令
+    if event.message.text.strip().startswith("@cron"):
         parts = event.message.text.strip().split()
         
         if len(parts) < 3:
