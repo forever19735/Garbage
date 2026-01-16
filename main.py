@@ -3,7 +3,7 @@ from datetime import date, datetime, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
 from linebot.v3.messaging import MessagingApi, Configuration, ApiClient
 from linebot.v3.webhook import WebhookHandler, MessageEvent
-from linebot.v3.messaging.models import PushMessageRequest, TextMessage
+from linebot.v3.messaging.models import PushMessageRequest, TextMessage, ReplyMessageRequest
 from linebot.v3.webhooks import TextMessageContent, JoinEvent, LeaveEvent
 import os
 import json
@@ -11,6 +11,10 @@ import requests
 import firebase_service
 import re
 from difflib import SequenceMatcher
+
+# ===== 新的命令處理架構 =====
+from handlers import MessageHandler, normalize_command as new_normalize_command
+from commands.handler import handle_command, create_command_context, is_known_command
 
 # 載入 .env 檔案中的環境變數（僅在本地開發時使用）
 try:
@@ -1882,16 +1886,69 @@ def callback():
 # ===== 處理訊息事件 =====
 @handler.add(MessageEvent)
 def handle_message(event):
+    """處理 LINE 訊息事件"""
+    
+    # 檢查是否為文字訊息
+    if not hasattr(event.message, 'text'):
+        return
+    
     # 標準化指令（支援中文別名）
-    if hasattr(event.message, 'text'):
-        original_text = event.message.text.strip()
-        normalized_text = normalize_command(original_text)
-        
-        # 如果標準化後不同，表示使用了別名
-        if normalized_text != original_text:
-            print(f"指令別名轉換: {original_text} -> {normalized_text}")
-            # 暫時替換 event.message.text 以便後續處理
-            event.message.text = normalized_text
+    original_text = event.message.text.strip()
+    normalized_text = normalize_command(original_text)
+    
+    # 如果標準化後不同，表示使用了別名
+    if normalized_text != original_text:
+        print(f"指令別名轉換: {original_text} -> {normalized_text}")
+    
+    # 非命令訊息不處理
+    if not normalized_text.startswith('@'):
+        return
+    
+    # ===== 使用新的命令處理架構 =====
+    group_id = get_group_id_from_event(event)
+    
+    # 建立命令上下文
+    context = create_command_context(
+        event=event,
+        group_id=group_id,
+        # 資料
+        groups=groups,
+        group_schedules=group_schedules,
+        group_messages=group_messages,
+        base_date=base_date,
+        # 回調函數
+        reminder_callback=send_group_reminder,
+        update_schedule=update_schedule,
+        update_member_schedule=update_member_schedule,
+        get_member_schedule_summary=get_member_schedule_summary,
+        get_schedule_summary=get_schedule_summary,
+        get_system_status=get_system_status,
+        add_member_to_week=add_member_to_week,
+        remove_member_from_week=remove_member_from_week,
+        clear_week_members=clear_week_members,
+        clear_all_members=clear_all_members,
+        clear_all_group_ids=clear_all_group_ids,
+        reset_all_data=reset_all_data,
+        save_base_date=save_base_date,
+        save_group_messages=save_group_messages,
+        firebase_service=firebase_service.firebase_service_instance,
+    )
+    
+    # 嘗試使用新的命令處理器
+    response = handle_command(normalized_text, context)
+    
+    if response is not None:
+        # 新處理器成功處理，發送回覆
+        req = ReplyMessageRequest(
+            reply_token=event.reply_token,
+            messages=[TextMessage(text=response)]
+        )
+        messaging_api.reply_message(req)
+        return
+    
+    # ===== 以下為原有邏輯（作為後備）=====
+    # 如果新處理器沒有處理，使用原有邏輯
+    event.message.text = normalized_text  # 確保使用標準化後的文字
     
     # 使用者設定推播星期、時、分指令
     if event.message.text.strip().startswith("@cron"):
