@@ -73,6 +73,19 @@ class ScheduleService:
             # 使用 update_schedule 來重建任務
             self.update_schedule(group_id, days, hour, minute, reminder_callback)
             
+    def ensure_default_schedules(self, group_ids: list, reminder_callback):
+        """
+        確保所有已知的群組都有預設排程
+        
+        Args:
+            group_ids: 所有已知群組 ID 列表
+            reminder_callback: 發送提醒的回調函數
+        """
+        for gid in group_ids:
+            if gid not in self.group_schedules:
+                print(f"為群組 {gid} 設定預設排程")
+                self.update_schedule(gid, "mon,thu", 17, 10, reminder_callback)
+            
     def get_schedule_info(self, group_id: str = None) -> Dict[str, Any]:
         """
         取得排程資訊

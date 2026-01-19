@@ -55,26 +55,26 @@ def create_command_context(
         'member_service': member_service,
         'schedule_service': schedule_service,
         'firebase_service': firebase_service,
-        # 資料 - 優先使用傳入的，否則從 Service 獲取 (如果 Service 存在)
+        # 資料 - 優先使用傳入的，否則從 Service 獲取
         'groups': groups if groups is not None else (member_service.groups if member_service else {}),
         'group_schedules': group_schedules if group_schedules is not None else (schedule_service.group_schedules if schedule_service else {}),
         'group_messages': group_messages if group_messages is not None else (member_service.group_messages if member_service else {}),
         'base_date': base_date if base_date is not None else (member_service.base_date if member_service else None),
-        # 回調函數
+        # 回調函數 - 優先使用傳入的，否則從 Service 獲取
         'reminder_callback': reminder_callback,
         'update_schedule': update_schedule,
-        'update_member_schedule': update_member_schedule,
-        'get_member_schedule_summary': get_member_schedule_summary,
-        'get_schedule_summary': get_schedule_summary,
+        'update_member_schedule': update_member_schedule if update_member_schedule else (member_service.update_member_schedule if member_service else None),
+        'get_member_schedule_summary': get_member_schedule_summary if get_member_schedule_summary else (member_service.get_member_schedule_summary if member_service else None),
+        'get_schedule_summary': get_schedule_summary if get_schedule_summary else (schedule_service.get_schedule_summary if schedule_service else None),
         'get_system_status': get_system_status,
-        'add_member_to_week': add_member_to_week,
-        'remove_member_from_week': remove_member_from_week,
-        'clear_week_members': clear_week_members,
-        'clear_all_members': clear_all_members,
-        'clear_all_group_ids': clear_all_group_ids,
+        'add_member_to_week': add_member_to_week if add_member_to_week else (member_service.add_member_to_week if member_service else None),
+        'remove_member_from_week': remove_member_from_week if remove_member_from_week else (member_service.remove_member_from_week if member_service else None),
+        'clear_week_members': clear_week_members if clear_week_members else (member_service.clear_week_members if member_service else None),
+        'clear_all_members': clear_all_members if clear_all_members else (member_service.clear_all_members if member_service else None),
+        'clear_all_group_ids': clear_all_group_ids if clear_all_group_ids else (member_service.clear_all_group_ids if member_service else None),
         'reset_all_data': reset_all_data,
-        'save_base_date': save_base_date,
-        'save_group_messages': save_group_messages,
+        'save_base_date': save_base_date if save_base_date else (lambda d: setattr(member_service, 'base_date', d) if member_service else None),
+        'save_group_messages': save_group_messages if save_group_messages else (lambda d: setattr(member_service, 'group_messages', d) if member_service else None),
     }
 
 

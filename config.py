@@ -3,6 +3,39 @@
 儲存錯誤訊息範本和其他設定
 """
 
+import os
+from typing import List, Optional
+
+# ===== 環境變數設定 =====
+class Config:
+    """應用程式設定"""
+    LINE_CHANNEL_ACCESS_TOKEN: str = ""
+    LINE_CHANNEL_SECRET: str = ""
+    LINE_GROUP_ID: List[str] = []
+    PORT: int = 8000
+    DEBUG: bool = False
+    
+    @classmethod
+    def load(cls):
+        """從環境變數載入設定"""
+        cls.LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
+        cls.LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET", "")
+        
+        # 處理 LINE_GROUP_ID (逗號分隔)
+        group_ids_str = os.getenv("LINE_GROUP_ID", "")
+        cls.LINE_GROUP_ID = [gid.strip() for gid in group_ids_str.split(",") if gid.strip()]
+        
+        cls.PORT = int(os.environ.get("PORT", 8000))
+        
+        # 檢查是否為測試模式（可選，根據需要）
+        if not cls.LINE_CHANNEL_ACCESS_TOKEN:
+            print("警告：LINE_CHANNEL_ACCESS_TOKEN 未設定，使用 Dummy Token 進行測試")
+            cls.LINE_CHANNEL_ACCESS_TOKEN = "dummy_token_for_testing"
+            
+        if not cls.LINE_CHANNEL_SECRET:
+            print("警告：LINE_CHANNEL_SECRET 未設定，使用 Dummy Secret 進行測試")
+            cls.LINE_CHANNEL_SECRET = "dummy_secret_for_testing"
+
 # 指令別名映射表（中文 -> 英文）
 COMMAND_ALIASES = {
     '@設定時間': '@time',
