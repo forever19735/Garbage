@@ -1,5 +1,5 @@
 ---
-name: Code Refactoring with SOLID Principles
+name: code-refactoring-solid
 description: Guide for refactoring Python code to follow SOLID principles and improve maintainability
 ---
 

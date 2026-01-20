@@ -1,5 +1,5 @@
 ---
-name: Firebase Integration
+name: firebase-integration
 description: Integrate Google Firebase Firestore for cloud data storage, implement CRUD operations, and manage data persistence
 ---
 

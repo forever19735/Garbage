@@ -1,5 +1,5 @@
 ---
-name: UX Command Interface Analysis
+name: ux-command-analysis
 description: Evaluates the user experience of the bot's command interface and provides actionable recommendations
 ---
 

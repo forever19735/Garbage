@@ -1,5 +1,5 @@
 ---
-name: Scheduling System
+name: scheduling-system
 description: Implement automated scheduling with APScheduler for multi-group timed broadcasts and rotation management
 ---
 

@@ -1,5 +1,5 @@
 ---
-name: Railway Deployment
+name: deployment-railway
 description: Deploy Python Flask applications to Railway.app with environment configuration and webhook setup
 ---
 

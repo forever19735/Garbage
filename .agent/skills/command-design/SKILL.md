@@ -1,5 +1,5 @@
 ---
-name: Command Design
+name: command-design
 description: Design and implement intuitive, user-friendly bot command interfaces with comprehensive help systems
 ---
 

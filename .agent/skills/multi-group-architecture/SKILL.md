@@ -1,5 +1,5 @@
 ---
-name: Multi-Group Architecture
+name: multi-group-architecture
 description: Design and implement independent per-group configurations for LINE Bot supporting multiple groups simultaneously
 ---
 

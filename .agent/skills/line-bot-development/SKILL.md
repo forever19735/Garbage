@@ -1,5 +1,5 @@
 ---
-name: LINE Bot Development
+name: line-bot-development
 description: Build and maintain LINE messaging API integrations, handle webhook events, and implement bot commands
 ---
 
